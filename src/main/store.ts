@@ -48,6 +48,24 @@ function writeItems(items: ClipboardItem[]): void {
     store.set("items", items);
 }
 
+// One-time migration: legacy html/rtf items → text. Chạy lúc module load,
+// idempotent — nếu không còn item legacy thì không ghi disk.
+(function migrateLegacyRichTypes(): void {
+    const items = readItems();
+    let dirty = false;
+    for (const item of items) {
+        const t = item.type as string;
+        if (t === "html" || t === "rtf") {
+            item.type = "text";
+            item.content = (item.preview || item.content).slice(0, 10000);
+            item.preview = undefined;
+            item.bookmarkTitle = undefined;
+            dirty = true;
+        }
+    }
+    if (dirty) writeItems(items);
+})();
+
 function sortItems(items: ClipboardItem[]): ClipboardItem[] {
     const pinned = items.filter((i) => i.pinned);
     const unpinned = items.filter((i) => !i.pinned).sort((a, b) => b.createdAt - a.createdAt);

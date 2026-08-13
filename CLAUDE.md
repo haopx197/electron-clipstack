@@ -199,6 +199,44 @@ npm run build:mac    # typecheck + build + electron-builder → file .dmg trong 
 - Vì không sign: lần đầu mở trên máy nào cũng cần `xattr -cr ClipStack.app` hoặc right-click → Open để qua Gatekeeper.
 - Quyền Accessibility: System Settings → Privacy & Security → Accessibility → cấp cho ClipStack (macOS tự nhắc lần đầu dùng tính năng paste).
 
+### Yêu cầu hệ thống (chạy được app đã build)
+
+| Mục            | Yêu cầu tối thiểu                                                            |
+| -------------- | ---------------------------------------------------------------------------- |
+| Hệ điều hành   | **macOS 11 Big Sur** trở lên (Electron 39 drop support 10.15 Catalina)       |
+| Kiến trúc CPU  | Apple Silicon (M1/M2/M3/M4) **hoặc** Intel x64                               |
+| RAM            | 4 GB+ (Electron runtime ~150-200 MB idle)                                    |
+| Disk           | ~200 MB cho app + tuỳ số clip (mỗi ảnh screenshot ~1-3 MB)                   |
+| Quyền cần cấp  | Accessibility (bắt buộc để simulate Cmd+V)                                   |
+
+**Máy nào chạy được**:
+
+- MacBook Air / Pro (2018+): OK — mặc định lên được Big Sur.
+- MacBook Air / Pro (M1+, 2020+): OK — Apple Silicon.
+- iMac (2015+), Mac mini (2018+), Mac Studio, Mac Pro (2019+): OK nếu update macOS 11+.
+- **Không chạy được**: máy dưới macOS 10.15 Catalina — mostly Mac từ 2012 và cũ hơn không update lên được Big Sur.
+
+**Không hỗ trợ iOS/iPadOS** — Electron chỉ chạy desktop (macOS/Windows/Linux), không port qua iOS.
+
+### Build cho cả 2 kiến trúc (universal DMG)
+
+Mặc định `electron-builder` build theo arch máy build (chỉ arm64 hoặc chỉ x64 → chỉ máy tương ứng chạy được). Muốn 1 DMG chạy cả Intel + Apple Silicon → thêm vào [electron-builder.yml](electron-builder.yml):
+
+```yaml
+mac:
+    target:
+        - target: dmg
+          arch:
+              - x64
+              - arm64
+    # HOẶC 1 file universal duy nhất:
+    # target:
+    #     - target: dmg
+    #       arch: universal
+```
+
+Trade-off: `universal` gấp đôi size (~300 MB DMG); riêng lẻ 2 arch xuất ra 2 file nhỏ hơn nhưng user phải chọn đúng.
+
 ## 8. Checklist thứ tự implement (đề xuất)
 
 1. Scaffold project (`package.json`, `electron.vite.config.ts`, tsconfig)
@@ -212,6 +250,45 @@ npm run build:mac    # typecheck + build + electron-builder → file .dmg trong 
 9. `electron-builder.yml` (mac target `dmg`, category `public.app-category.utilities`)
 10. Test trên Mac thật: `npm run dev` → thử copy text/ảnh, pin/xoá, đổi hotkey, paste
 11. `npm run build:mac` → test file `.dmg` xuất ra
+
+## Runtime paths (macOS)
+
+**Folder ảnh clipboard**:
+
+```
+/Users/brianpgrt/Library/Application Support/clipstack/clip-images
+```
+
+Base = `app.getPath("userData")` (xem [images.ts](src/main/images.ts)). Mỗi image: `<uuid>.<ext>`, ext theo format thật (sniff magic bytes tại [clipboardWatcher.ts](src/main/clipboardWatcher.ts) — `sniffImageFormat`).
+
+Rule ext:
+
+- **Copy file ảnh từ Finder** → giữ ext gốc: `png / jpg / gif / bmp / webp / svg / ico / avif`. Riêng `tiff / heic` convert sang `png` (Chromium `<img>` không render).
+- **Copy image data (không phải file)** — screenshot, Preview, Photoshop, Figma, browser "Copy Image" — **luôn `.png`**. Vì pasteboard chỉ có raw pixel data, helper Swift decode qua `NSImage` → PNG.
+
+Mở nhanh trong Finder:
+
+```
+open "/Users/brianpgrt/Library/Application Support/clipstack/clip-images"
+```
+
+Settings JSON (electron-store):
+
+```
+/Users/brianpgrt/Library/Application Support/clipstack/clipstack.json
+```
+
+## Behavior override macOS
+
+**Screenshot target = clipboard**: [screencapture.ts](src/main/screencapture.ts) chạy lúc `whenReady` → `defaults write com.apple.screencapture target clipboard` + `killall SystemUIServer` (idempotent, skip nếu đã set). Sau đó `Cmd+Shift+3/4/5` bỏ ảnh thẳng vào clipboard → watcher pick up.
+
+Không auto-restore lúc quit (user cài ClipStack chính vì behavior này). Undo:
+
+```
+defaults delete com.apple.screencapture target && killall SystemUIServer
+```
+
+Đã thử approach `globalShortcut.register('Command+Shift+4')` để intercept — **fail**: macOS WindowServer consume phím ở tầng dưới Carbon `RegisterEventHotKey`, callback không fire. Không quay lại hướng đó.
 
 ## 9. Ngoài phạm vi MVP (làm sau)
 

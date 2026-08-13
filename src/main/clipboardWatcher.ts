@@ -19,6 +19,26 @@ function tryRealpath(p: string): string {
     }
 }
 
+// URL string đơn — không kèm text xung quanh. Dùng để detect "copy 1 URL" từ
+// nội dung web/chat/doc → hiển thị dưới dạng bookmark cho đẹp.
+const URL_RE = /^https?:\/\/\S+$/i;
+
+// Strip tags → text. Dùng khi app chỉ ghi HTML mà không kèm plain-text (hiếm).
+function htmlToText(html: string): string {
+    return html
+        .replace(/<style[\s\S]*?<\/style>/gi, " ")
+        .replace(/<script[\s\S]*?<\/script>/gi, " ")
+        .replace(/<[^>]+>/g, " ")
+        .replace(/&nbsp;/g, " ")
+        .replace(/&amp;/g, "&")
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/\s+/g, " ")
+        .trim();
+}
+
 /**
  * Detect image format qua magic bytes / content signature.
  *
@@ -293,37 +313,40 @@ function captureCurrent(): { sig: string; save: () => void } | null {
 
     const hasPlainText = has("public.utf8-plain-text") || has("public.plain-text");
 
-    // 4) Plain text — mặc định cho mọi text-like copy (browser, Slack, editor…).
+    // 4) Text — plain-text ưu tiên; fallback strip HTML nếu app chỉ ghi HTML (rất
+    //    hiếm — legacy email client, script custom). RTF-only skip (không parser).
+    let text: string | null = null;
     if (hasPlainText) {
-        const text = clipboard.readText();
-        if (text) {
-            const sig = `txt:${text}`;
-            return { sig, save: () => addItem({ type: "text", content: text }) };
-        }
-    }
-
-    // 5) HTML/RTF thuần: chỉ dùng khi KHÔNG có plain-text (rất hiếm — vài
-    //    editor rich text chỉ export html/rtf mà không kèm text).
-    if (!hasPlainText && has("public.html")) {
+        const t = clipboard.readText();
+        if (t) text = t;
+    } else if (has("public.html")) {
         const html = clipboard.readHTML();
         if (html) {
-            const sig = `html:${sha1(html)}`;
-            return {
-                sig,
-                save: () => addItem({ type: "html", content: html })
-            };
+            const stripped = htmlToText(html);
+            if (stripped) text = stripped;
         }
     }
 
-    if (!hasPlainText && has("public.rtf")) {
-        const rtf = clipboard.readRTF();
-        if (rtf) {
-            const sig = `rtf:${sha1(rtf)}`;
+    if (text) {
+        // Auto-detect URL: text là 1 URL duy nhất → bookmark type (không title,
+        // không như bookmark-branch phía trên có `public.url-name`). Case điển hình:
+        // user copy URL từ nội dung web / chat / doc → paste ra vẫn là URL string.
+        const trimmed = text.trim();
+        if (URL_RE.test(trimmed)) {
+            const url = trimmed;
             return {
-                sig,
-                save: () => addItem({ type: "rtf", content: rtf })
+                sig: `bm:${url}`,
+                save: () =>
+                    addItem({
+                        type: "bookmark",
+                        content: url,
+                        bookmarkTitle: "",
+                        preview: url
+                    })
             };
         }
+        const sig = `txt:${text}`;
+        return { sig, save: () => addItem({ type: "text", content: text! }) };
     }
 
     return null;

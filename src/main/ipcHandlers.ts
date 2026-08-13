@@ -17,42 +17,12 @@ function sniffUti(bytes: Buffer): "public.svg-image" | null {
     return null;
 }
 
-// Strip tags → text preview (fallback khi item.preview không có, ví dụ html chỉ có
-// mỗi HTML representation không kèm plain-text). Đủ dùng cho hầu hết editor.
-function htmlToText(html: string): string {
-    return html
-        .replace(/<style[\s\S]*?<\/style>/gi, " ")
-        .replace(/<script[\s\S]*?<\/script>/gi, " ")
-        .replace(/<[^>]+>/g, " ")
-        .replace(/&nbsp;/g, " ")
-        .replace(/&amp;/g, "&")
-        .replace(/&lt;/g, "<")
-        .replace(/&gt;/g, ">")
-        .replace(/&quot;/g, '"')
-        .replace(/&#39;/g, "'")
-        .replace(/\s+/g, " ")
-        .trim();
-}
-
 function writeItemToClipboard(item: ClipboardItem): void {
     clipboard.clear();
 
     switch (item.type) {
         case "text": {
             clipboard.writeText(item.content);
-            return;
-        }
-        case "html": {
-            // Fallback: nếu không có preview thì strip tags để text-only paste target
-            // (VD Notes, terminal, plaintext editor) vẫn nhận được nội dung.
-            const text = (item.preview ?? "").trim() || htmlToText(item.content);
-            clipboard.write({ text, html: item.content });
-            return;
-        }
-        case "rtf": {
-            // RTF strip tag phức tạp (cần parser). Nếu không có preview thì bỏ text —
-            // apps đọc rtf sẽ nhận đúng, apps chỉ đọc text sẽ blank (acceptable).
-            clipboard.write({ text: item.preview ?? "", rtf: item.content });
             return;
         }
         case "bookmark": {

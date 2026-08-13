@@ -34,8 +34,6 @@ function TypeIcon({ type }: { type: ClipboardItemType }) {
         case "file":
             return <IconFolderFileStorage />;
         case "text":
-        case "html":
-        case "rtf":
         case "bookmark":
         default:
             return <IconTextCreation />;
@@ -50,32 +48,12 @@ function ItemBody({ item }: { item: ClipboardItem }) {
         case "image":
             return <ItemImage src={imageUrl(item.content)} alt="clipboard image" />;
 
-        case "html":
-            return (
-                <>
-                    <Badges>
-                        <BadgeHtml>HTML</BadgeHtml>
-                    </Badges>
-                    <ItemText>{item.preview || item.content.replace(/<[^>]+>/g, " ").slice(0, 300)}</ItemText>
-                </>
-            );
-
-        case "rtf":
-            return (
-                <>
-                    <Badges>
-                        <BadgeRtf>RTF</BadgeRtf>
-                    </Badges>
-                    <ItemText>{item.preview || "(rich text)"}</ItemText>
-                </>
-            );
-
         case "bookmark":
             return (
-                <Bookmark>
+                <div>
                     <BookmarkTitle>{item.bookmarkTitle || item.preview || hostname(item.content)}</BookmarkTitle>
                     <BookmarkUrl>{item.content}</BookmarkUrl>
-                </Bookmark>
+                </div>
             );
 
         case "file":
@@ -146,45 +124,9 @@ const ItemImage = styled.img`
     object-fit: contain;
 `;
 
-const Badges = styled.div`
-    display: flex;
-    gap: 4px;
-    margin-bottom: 4px;
-`;
-
-const badgeBase = css`
-    display: inline-block;
-    font-size: 9px;
-    font-weight: 700;
-    letter-spacing: 0.4px;
-    padding: 1px 5px;
-    border-radius: 3px;
-    line-height: 1.4;
-    text-transform: uppercase;
-`;
-
-const BadgeHtml = styled.span`
-    ${badgeBase};
-    background: rgba(239, 134, 17, 0.14);
-    color: var(--color-info);
-`;
-
-const BadgeRtf = styled.span`
-    ${badgeBase};
-    background: rgba(119, 204, 26, 0.16);
-    color: #5aa314;
-`;
-
-const Bookmark = styled.div`
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    min-width: 0;
-`;
-
 const BookmarkTitle = styled.div`
     color: var(--color-text-strong);
-    font-weight: 600;
+    font-weight: 500;
     font-size: 12px;
     line-height: 1.5;
     overflow: hidden;

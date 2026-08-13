@@ -1,4 +1,4 @@
-export type ClipboardItemType = "text" | "image" | "html" | "rtf" | "bookmark" | "file";
+export type ClipboardItemType = "text" | "image" | "bookmark" | "file";
 
 export type ClipboardItem = {
     id: string;
@@ -6,14 +6,12 @@ export type ClipboardItem = {
     /**
      * Primary payload:
      * - text:     the raw text
-     * - image:    absolute path to the PNG file inside userData/clip-images
-     * - html:     the HTML source string
-     * - rtf:      the RTF source string
+     * - image:    absolute path to file inside userData/clip-images
      * - bookmark: the URL
      * - file:     the absolute path to the copied file (owned by the user, not by ClipStack)
      */
     content: string;
-    /** Plain-text preview for rich types (html / rtf / bookmark). */
+    /** Plain-text preview for bookmark. */
     preview?: string;
     /** Title of a bookmark. */
     bookmarkTitle?: string;

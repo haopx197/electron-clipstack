@@ -20,11 +20,13 @@ nsis:
     createDesktopShortcut: always
 mac:
     category: public.app-category.utilities
+    minimumSystemVersion: "11.0"
     target:
         - dmg
     entitlementsInherit: build/entitlements.mac.plist
     extendInfo:
         - LSUIElement: true
+        - LSMinimumSystemVersion: "11.0"
         - NSAccessibilityUsageDescription: ClipStack simulates ⌘V to paste your selected clipboard item into the active app.
     notarize: false
 dmg:

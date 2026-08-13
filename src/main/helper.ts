@@ -22,6 +22,7 @@ let pasteboardImagePath: string | null = null;
 
 function resolveHelperPath(): string {
     const candidates = [
+        join(process.resourcesPath, "app.asar.unpacked", "resources", "ClipStackHelper"),
         join(process.resourcesPath, "resources", "ClipStackHelper"),
         join(__dirname, "../../resources/ClipStackHelper")
     ];

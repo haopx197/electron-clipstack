@@ -7,6 +7,7 @@ let tray: Tray | null = null;
 
 function resolveTrayIconPath(): string {
     const candidates = [
+        join(process.resourcesPath, "app.asar.unpacked", "resources", "trayIconTemplate.png"),
         join(process.resourcesPath, "resources", "trayIconTemplate.png"),
         join(__dirname, "../../resources/trayIconTemplate.png")
     ];

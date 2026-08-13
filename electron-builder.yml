@@ -21,7 +21,11 @@ nsis:
 mac:
     category: public.app-category.utilities
     minimumSystemVersion: "11.0"
-    identity: null    # ad-hoc sign (không cần Developer ID $99/năm)
+    # Bỏ trống identity + set CSC_IDENTITY_AUTO_DISCOVERY=false lúc build →
+    # electron-builder / electron-osx-sign sẽ ad-hoc sign đúng cách (từng framework,
+    # helper, main executable riêng), tương thích Electron ASAR integrity check.
+    # KHÔNG dùng `identity: null` (skip sign hoàn toàn) hoặc `codesign --deep --force`
+    # thủ công — cả 2 đều gây `task_name_for_pid: (os/kern) failure (5)`.
     target:
         - target: dmg
           arch:

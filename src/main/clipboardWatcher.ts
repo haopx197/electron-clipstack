@@ -4,7 +4,12 @@ import { basename } from "path";
 import { readFileSync, realpathSync } from "fs";
 import { addItem } from "./store";
 import { saveImage, saveImageBytes } from "./images";
-import { getPasteboardFilePaths, startClipboardWatch, stopClipboardWatch } from "./helper";
+import {
+    getPasteboardFilePaths,
+    getPasteboardImagePath,
+    startClipboardWatch,
+    stopClipboardWatch
+} from "./helper";
 
 function tryRealpath(p: string): string {
     try {
@@ -147,6 +152,7 @@ function captureCurrent(): { sig: string; save: () => void } | null {
         }
     };
 
+
     // 1) File copy từ Finder — kể cả khi kèm image preview, luôn ưu tiên file gốc.
     //    Đọc bytes → sniff magic:
     //      • Format browser render được (PNG/JPEG/GIF/BMP/WEBP/SVG/ICO/AVIF) → save raw
@@ -203,8 +209,31 @@ function captureCurrent(): { sig: string; save: () => void } | null {
         }
     }
 
-    // 2) Image data trực tiếp — chỉ khi KHÔNG có file-url (để không nhầm preview
-    //    của Finder ở bước 1 đã bắt).
+    // 2a) Helper Swift đã decode được image qua NSImage → PNG temp file. Thử
+    //     TRƯỚC Electron readImage vì cover được cả case Chrome/browser ghi
+    //     legacy OSType flavors (`PNGf`/`JPEG`/`8BPS`…) mà Electron miss.
+    const helperImgPath = getPasteboardImagePath();
+    if (helperImgPath) {
+        try {
+            const bytes = readFileSync(helperImgPath);
+            if (bytes.length > 0) {
+                const sig = `img:${sha1(bytes)}`;
+                return {
+                    sig,
+                    save: () => {
+                        const path = saveImageBytes(bytes, "png");
+                        addItem({ type: "image", content: path });
+                    }
+                };
+            }
+        } catch {
+            // fall through to Electron path
+        }
+    }
+
+    // 2b) Fallback: Electron readImage. Đủ cho app "well-behaved" (Preview,
+    //     screenshot, Photoshop…). Chỉ với ứng dụng gián tiếp / helper chưa
+    //     spawn / helper crash mới rơi vào đây.
     if (has("public.tiff") || has("public.png")) {
         const image = clipboard.readImage();
         if (!image.isEmpty()) {
@@ -278,9 +307,22 @@ function captureCurrent(): { sig: string; save: () => void } | null {
     return null;
 }
 
+// Timestamp cho tới thời điểm nào mọi capture bị coi là "OUR write" và bỏ qua.
+// Set bởi markClipboardAsCurrent(): sau khi app tự ghi clipboard (paste-item),
+// helper Swift còn poll delay + waitForPasteboardReady tối đa 700ms mới thấy
+// state mới. Trong window đó mọi capture đều là ghi của mình → chỉ update
+// baseline sig, không add. Time-based (không "consume 1 event") vì Electron
+// `writeText+writeBuffer` (case file paste) có thể fire 2 changeCount bumps,
+// và helper multi-phase wait cũng cần covered.
+let suppressUntilMs = 0;
+
 function poll(): void {
     const cap = captureCurrent();
     if (!cap) return;
+    if (Date.now() < suppressUntilMs) {
+        lastSignature = cap.sig;
+        return;
+    }
     if (cap.sig === lastSignature) return;
     lastSignature = cap.sig;
     cap.save();
@@ -319,8 +361,16 @@ export function stopClipboardWatcher(): void {
 /**
  * After the app itself writes to the clipboard (paste-item), call this to prevent the
  * watcher from re-capturing that write as a "new" copy from the user.
+ *
+ * KHÔNG chỉ set lastSignature sync — helper Swift còn poll delay + wait phase 2
+ * mới thấy state mới, và với image thì bytes helper decode (NSImage→PNG) khác
+ * bytes gốc của item → sig sẽ mismatch. Thay vào đó suppress mọi capture
+ * trong 800ms để đảm bảo tất cả clipboard-changed từ chính write của mình bị
+ * dập, chỉ update baseline sig.
+ *
+ * Trade-off: user copy lại trong 800ms sau khi paste → miss detect. Chấp nhận
+ * được — user thường thao tác chậm hơn.
  */
 export function markClipboardAsCurrent(): void {
-    const cap = captureCurrent();
-    lastSignature = cap?.sig ?? null;
+    suppressUntilMs = Date.now() + 800;
 }

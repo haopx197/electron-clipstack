@@ -48,7 +48,7 @@ export function ClipboardTab(): React.JSX.Element {
                 <Count>
                     {items.length} {items.length === 1 ? "clip" : "clips"}
                 </Count>
-                <Button variant="secondary" onClick={handleClearAll} disabled={!canClear}>
+                <Button variant="secondary" danger onClick={handleClearAll} disabled={!canClear}>
                     Clear All
                 </Button>
             </Header>

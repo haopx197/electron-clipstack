@@ -16,7 +16,6 @@ export function Typography({
     color,
     align,
     transform,
-    spacing = 0.2,
     lineHeight,
     style = {},
     children = null
@@ -26,7 +25,6 @@ export function Typography({
     color?: CSSProperties["color"];
     align?: CSSProperties["textAlign"];
     transform?: CSSProperties["textTransform"];
-    spacing?: number | string;
     lineHeight?: number | string;
     style?: CSSProperties;
     children?: ReactNode;
@@ -38,7 +36,6 @@ export function Typography({
             $color={color}
             $align={align}
             $transform={transform}
-            $spacing={spacing}
             $lineHeight={lineHeight}
             style={style}
         >
@@ -53,13 +50,11 @@ const Text = styled.div<{
     $color?: CSSProperties["color"];
     $align?: CSSProperties["textAlign"];
     $transform?: CSSProperties["textTransform"];
-    $spacing: number | string;
     $lineHeight?: number | string;
 }>`
     font-family: var(--font);
     font-weight: ${(p) => WEIGHT[p.$weight]};
     font-size: ${(p) => p.$size}px;
-    letter-spacing: ${(p) => p.$spacing}px;
     line-height: ${(p) => p.$lineHeight ?? 1.4};
     ${(p) => p.$color !== undefined && `color: ${p.$color};`}
     ${(p) => p.$align !== undefined && `text-align: ${p.$align};`}

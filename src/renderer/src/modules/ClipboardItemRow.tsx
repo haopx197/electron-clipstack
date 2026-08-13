@@ -4,12 +4,12 @@ import type { ClipboardItem, ClipboardItemType } from "../../../shared/types";
 import { IconDelete, IconFolderFileStorage, IconImageCrop, IconPin, IconPinOff, IconTextCreation } from "../SVGs";
 import { Button } from "../components";
 
-interface Props {
+type Props = {
     item: ClipboardItem;
     onPaste: (id: string) => void;
     onPin: (id: string) => void;
     onDelete: (id: string) => void;
-}
+};
 
 function imageUrl(path: string): string {
     return `clip-image://local${encodeURI(path)}`;
@@ -27,7 +27,7 @@ function hostname(url: string): string {
     }
 }
 
-function TypeIcon({ type }: { type: ClipboardItemType }): React.JSX.Element {
+function TypeIcon({ type }: { type: ClipboardItemType }) {
     switch (type) {
         case "image":
             return <IconImageCrop />;
@@ -42,7 +42,7 @@ function TypeIcon({ type }: { type: ClipboardItemType }): React.JSX.Element {
     }
 }
 
-function ItemBody({ item }: { item: ClipboardItem }): React.JSX.Element {
+function ItemBody({ item }: { item: ClipboardItem }) {
     switch (item.type) {
         case "text":
             return <ItemText>{item.content}</ItemText>;
@@ -88,7 +88,7 @@ function ItemBody({ item }: { item: ClipboardItem }): React.JSX.Element {
     }
 }
 
-export function ClipboardItemRow({ item, onPaste, onPin, onDelete }: Props): React.JSX.Element {
+export function ClipboardItemRow({ item, onPaste, onPin, onDelete }: Props) {
     const handleClick = (): void => onPaste(item.id);
 
     return (
@@ -109,7 +109,7 @@ export function ClipboardItemRow({ item, onPaste, onPin, onDelete }: Props): Rea
                     }}
                     aria-label={item.pinned ? "Unpin item" : "Pin item"}
                 >
-                    {item.pinned ? <IconPinOff /> : <IconPin />}
+                    {item.pinned ? <IconPinOff color="#0493e5" /> : <IconPin />}
                 </Button>
                 <Button
                     variant="icon"
@@ -120,7 +120,7 @@ export function ClipboardItemRow({ item, onPaste, onPin, onDelete }: Props): Rea
                     }}
                     aria-label="Delete item"
                 >
-                    <IconDelete />
+                    <IconDelete color="#dd4558" />
                 </Button>
             </Actions>
         </Item>
@@ -129,13 +129,13 @@ export function ClipboardItemRow({ item, onPaste, onPin, onDelete }: Props): Rea
 
 const ItemText = styled.div`
     color: var(--color-text-strong);
-    line-height: 1.35;
+    line-height: 1.5;
     word-break: break-word;
     display: -webkit-box;
     -webkit-line-clamp: 3;
     -webkit-box-orient: vertical;
     overflow: hidden;
-    font-size: 12.5px;
+    font-size: 12px;
 `;
 
 const ItemImage = styled.img`
@@ -154,7 +154,7 @@ const Badges = styled.div`
 
 const badgeBase = css`
     display: inline-block;
-    font-size: 9.5px;
+    font-size: 9px;
     font-weight: 700;
     letter-spacing: 0.4px;
     padding: 1px 5px;
@@ -185,8 +185,8 @@ const Bookmark = styled.div`
 const BookmarkTitle = styled.div`
     color: var(--color-text-strong);
     font-weight: 600;
-    font-size: 12.5px;
-    line-height: 1.35;
+    font-size: 12px;
+    line-height: 1.5;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -194,7 +194,7 @@ const BookmarkTitle = styled.div`
 
 const BookmarkUrl = styled.div`
     color: var(--color-primary);
-    font-size: 11.5px;
+    font-size: 12px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -210,7 +210,7 @@ const FileBox = styled.div`
 const FileName = styled.div`
     color: var(--color-text-strong);
     font-weight: 600;
-    font-size: 12.5px;
+    font-size: 12px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -218,8 +218,7 @@ const FileName = styled.div`
 
 const FilePath = styled.div`
     color: var(--color-text);
-    font-size: 11px;
-    opacity: 0.75;
+    font-size: 12px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -244,21 +243,19 @@ const Actions = styled.div`
     display: inline-flex;
     flex-shrink: 0;
     gap: 4px;
-    align-self: center;
 `;
 
 const Item = styled.div<{ $pinned: boolean }>`
     position: relative;
     display: flex;
-    align-items: flex-start;
-    gap: 8px;
-    padding: 8px 12px;
-    margin: 2px 6px;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
     cursor: pointer;
 
     ${(p) =>
         p.$pinned &&
         css`
-            background: rgba(4, 147, 229, 0.05);
+            background-color: #ebeef1;
         `}
 `;

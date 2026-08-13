@@ -15,6 +15,10 @@ let clipboardChangedListener: (() => void) | null = null;
 // Cache real POSIX paths của file URLs trên pasteboard, do helper Swift push
 // mỗi khi clipboard đổi (đọc qua NSURL nên resolve được /.file/id=<inode>).
 let pasteboardFilePaths: string[] = [];
+// Cache path tới PNG temp file mà helper Swift dump từ pasteboard (đọc qua
+// NSImage, bắt được legacy OSType flavors mà Electron readImage bỏ sót — VD
+// image copy từ Chrome/Facebook chỉ có `PNGf`/`JPEG` OSType).
+let pasteboardImagePath: string | null = null;
 
 function resolveHelperPath(): string {
     const candidates = [
@@ -43,6 +47,9 @@ function handleLine(line: Line): void {
     switch (key) {
         case "pb-files":
             pasteboardFilePaths = rest.length === 0 ? [] : rest.split("\t");
+            return;
+        case "pb-image":
+            pasteboardImagePath = rest.length === 0 ? null : rest;
             return;
         case "clipboard-changed":
             clipboardChangedListener?.();
@@ -78,6 +85,14 @@ function handleLine(line: Line): void {
 // phát hiện clipboard đổi (push TRƯỚC clipboard-changed).
 export function getPasteboardFilePaths(): string[] {
     return pasteboardFilePaths;
+}
+
+// Path tới PNG file (trong $TMPDIR) chứa image data helper decode được từ
+// pasteboard. Null nếu clipboard không có image hoặc decode fail. Fallback cho
+// case Electron `clipboard.readImage()` empty vì Chrome/browser ghi legacy
+// OSType flavors.
+export function getPasteboardImagePath(): string | null {
+    return pasteboardImagePath;
 }
 
 export function startHelper(): void {

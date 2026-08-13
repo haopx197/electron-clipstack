@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import styled from "styled-components";
 
-import { IconCopy, IconFolderLibrary, IconSettings } from "@renderer/SVGs";
+import { IconSelect, IconPaintBoard, IconSettings } from "@renderer/SVGs";
 import { ClipboardTab } from "./ClipboardTab";
 import { IconsTab } from "./IconsTab";
 import { SettingsTab } from "./SettingsTab";
@@ -29,17 +29,16 @@ export function TabView(): React.JSX.Element {
             <TabBar role="tablist">
                 <TabGroup>
                     <TabButton role="tab" aria-selected={tab === "clipboard"} onClick={() => setTab("clipboard")}>
-                        <IconCopy color={tab === "clipboard" ? "#0493e5" : "#141B34"} />
+                        <IconSelect color={tab === "clipboard" ? "#0493e5" : "#141B34"} />
                         {tab === "clipboard" && <TabActive />}
                     </TabButton>
                     <TabButton role="tab" aria-selected={tab === "icons"} onClick={() => setTab("icons")}>
-                        <IconFolderLibrary color={tab === "icons" ? "#0493e5" : "#141B34"} />
+                        <IconPaintBoard color={tab === "icons" ? "#0493e5" : "#141B34"} />
                         {tab === "icons" && <TabActive />}
                     </TabButton>
                 </TabGroup>
                 <TabButton role="tab" aria-selected={tab === "settings"} onClick={() => setTab("settings")}>
                     <IconSettings color={tab === "settings" ? "#0493e5" : "#141B34"} />
-                    {tab === "settings" && <TabActive />}
                 </TabButton>
             </TabBar>
             {tab === "clipboard" && <ClipboardTab />}

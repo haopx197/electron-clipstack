@@ -1,7 +1,8 @@
 import { KeyboardEvent, useEffect, useRef, useState } from "react";
-import styled, { css } from "styled-components";
+import styled from "styled-components";
 
-import { Typography } from "@renderer/components";
+import { Input } from "@renderer/components";
+import { IconInformationCircle } from "@renderer/SVGs";
 
 const MODIFIER_KEYS = new Set(["Control", "Shift", "Alt", "Meta"]);
 
@@ -29,8 +30,6 @@ function keyToAccelPart(key: string): string | null {
 
 const IS_ASCII = /^[\x20-\x7E]+$/;
 
-// e.code fallback khi e.key ra ký tự non-ASCII. macOS Option+<letter> tạo ký tự
-// Unicode (Option+Z → Ω, Option+A → å) mà Electron globalShortcut từ chối.
 function codeToAscii(code: string): string | null {
     const letter = code.match(/^Key([A-Z])$/);
     if (letter) return letter[1];
@@ -51,7 +50,6 @@ function buildAccelerator(e: KeyboardEvent<HTMLInputElement>): string | null {
     if (e.ctrlKey) parts.push("Control");
     if (e.altKey) parts.push("Alt");
     if (e.shiftKey) parts.push("Shift");
-    // Yêu cầu ít nhất 1 modifier để hotkey không conflict với gõ chữ bình thường.
     if (parts.length === 0) return null;
     parts.push(keyPart);
     return parts.join("+");
@@ -84,63 +82,26 @@ export function SettingsTab(): React.JSX.Element {
             setAccel(next);
             setError(null);
         } else {
-            setError(result.error || "Failed to register hotkey.");
+            setError("Failed to register hotkey.");
         }
     };
 
     return (
         <Wrapper>
-            <Typography>Shortcut - Press keys to change.</Typography>
             <Input
                 ref={inputRef}
-                $error={!!error}
+                label="Shortcut - Press keys to change."
+                labelIcon={<IconInformationCircle />}
+                error={error}
                 value={accel ? humanize(accel) : ""}
                 placeholder="⌘ ⇧ V"
                 readOnly
                 onKeyDown={onKeyDown}
             />
-            {error && <ErrorText>{error}</ErrorText>}
         </Wrapper>
     );
 }
 
 const Wrapper = styled.div`
     padding: 16px;
-`;
-
-const Input = styled.input<{ $error: boolean }>`
-    display: block;
-    width: 100%;
-    height: 50px;
-    padding-inline: 12px;
-    border-radius: 16px;
-    border: 1px solid ${(p) => (p.$error ? "var(--color-error)" : "var(--color-border)")};
-    color: var(--color-text-strong);
-    font-size: inherit;
-    font-weight: 500;
-    outline: none;
-    cursor: pointer;
-    transition:
-        border-color 0.12s ease,
-        box-shadow 0.12s ease;
-
-    &:focus {
-        border-color: var(--color-primary);
-        box-shadow: 0 0 0 3px rgba(4, 147, 229, 0.15);
-    }
-
-    ${(p) =>
-        p.$error &&
-        css`
-            &:focus {
-                border-color: var(--color-error);
-                box-shadow: 0 0 0 3px rgba(221, 69, 88, 0.15);
-            }
-        `}
-`;
-
-const ErrorText = styled.div`
-    margin-top: 4px;
-    font-size: 12px;
-    color: var(--color-error);
 `;

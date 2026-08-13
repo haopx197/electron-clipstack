@@ -5,6 +5,6 @@ export * from "./IconFolderFileStorage";
 export * from "./IconPin";
 export * from "./IconPinOff";
 export * from "./IconDelete";
-export * from "./IconCopy";
-export * from "./IconFolderLibrary";
+export * from "./IconSelect";
+export * from "./IconPaintBoard";
 export * from "./IconInformationCircle";

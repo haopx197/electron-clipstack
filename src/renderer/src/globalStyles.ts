@@ -34,7 +34,6 @@ export const GlobalStyles = createGlobalStyle`
         font-size: 14px;
         color: var(--color-text);
         background: var(--color-bg);
-        -webkit-font-smoothing: antialiased;
         user-select: none;
         cursor: default;
     }

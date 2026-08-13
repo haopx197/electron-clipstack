@@ -4,6 +4,7 @@ import { electronApp } from "@electron-toolkit/utils";
 import { createMainWindow, showWindow } from "./windowManager";
 import { createTray } from "./tray";
 import { registerHotkey, unregisterAllHotkeys } from "./hotkey";
+import { ensureScreenshotTargetIsClipboard } from "./screencapture";
 import { registerIpcHandlers, broadcastItemsUpdated } from "./ipcHandlers";
 import { startClipboardWatcher, stopClipboardWatcher } from "./clipboardWatcher";
 import { startHelper } from "./helper";
@@ -78,6 +79,8 @@ app.whenReady().then(() => {
     if (!hotkeyResult.ok) {
         console.warn("[clipstack] failed to register hotkey:", hotkeyResult.error);
     }
+
+    ensureScreenshotTargetIsClipboard();
 
     startClipboardWatcher(() => {
         broadcastItemsUpdated();

@@ -12,7 +12,7 @@ Clipboard history manager cho macOS, lấy cảm hứng từ Windows 11 Clipboar
 | UI               | React                                   | quen thuộc, đủ nhẹ cho 1 popover nhỏ                         |
 | Storage          | `electron-store` (JSON)                 | dữ liệu nhỏ (≤200 item), không cần search → không cần SQLite |
 | Đóng gói         | `electron-builder` → target `dmg`       | không lên App Store, không cần sign/notarize                 |
-| Paste tự động    | `osascript` (AppleScript System Events) | dùng chung với việc query vị trí caret focused element      |
+| Paste tự động    | `osascript` (AppleScript System Events) | dùng chung với việc query vị trí caret focused element       |
 
 ## 2. Cấu trúc project
 
@@ -65,17 +65,17 @@ clipstack/
 ## 3. Data model (`src/shared/types.ts`)
 
 ```ts
-interface ClipboardItem {
+type ClipboardItem = {
     id: string;
     type: "text" | "image";
     content: string; // text: nội dung thô; image: path file PNG trong userData/clip-images
     pinned: boolean;
     createdAt: number; // dùng để sort trong nhóm unpinned
-}
+};
 
-interface AppSettings {
+type AppSettings = {
     hotkey: string; // accelerator string, mặc định 'Command+Shift+V'
-}
+};
 
 const DEFAULT_HOTKEY = "Command+Shift+V";
 const DEFAULT_WINDOW_SIZE = { width: 400, height: 500 };
@@ -225,6 +225,7 @@ npm run build:mac    # typecheck + build + electron-builder → file .dmg trong 
 ## Electron API — CHUẨN
 
 **Version pinned**: `electron ^39.2.6` (xem `package.json`). Docs tham chiếu:
+
 - [app](https://www.electronjs.org/docs/latest/api/app)
 - [browser-window](https://www.electronjs.org/docs/latest/api/browser-window)
 - [tray](https://www.electronjs.org/docs/latest/api/tray)
@@ -232,10 +233,12 @@ npm run build:mac    # typecheck + build + electron-builder → file .dmg trong 
 - [native-image](https://www.electronjs.org/docs/latest/api/native-image)
 
 **CẢNH BÁO**: docs URL `/docs/latest/` track branch mới nhất, có API xuất hiện trước khi ship trong Electron 39. Trước khi dùng bất kỳ API nào, **verify** nó tồn tại trong v39 shipped bằng:
+
 - Grep trong `node_modules/electron/electron.d.ts`
 - Hoặc test compile TS (nếu missing → TS error `Property 'X' does not exist on type 'App'`)
 
 **APIs đã verify KHÔNG tồn tại trong Electron 39** (docs latest có, shipped không):
+
 - `app.isActive()` → thay bằng track state qua event `did-become-active` / `did-resign-active`, hoặc `BrowserWindow.getFocusedWindow() !== null`
 
 Khi thêm/đổi Electron API, follow docs chính thức + verify version. Không code dựa vào memory/guess.

@@ -1,6 +1,6 @@
 export type ClipboardItemType = "text" | "image" | "html" | "rtf" | "bookmark" | "file";
 
-export interface ClipboardItem {
+export type ClipboardItem = {
     id: string;
     type: ClipboardItemType;
     /**
@@ -21,17 +21,17 @@ export interface ClipboardItem {
     fileName?: string;
     pinned: boolean;
     createdAt: number;
-}
+};
 
-export interface AppSettings {
+export type AppSettings = {
     hotkey: string;
     maxClips: number;
-}
+};
 
-export interface SetHotkeyResult {
+export type SetHotkeyResult = {
     ok: boolean;
     error?: string;
-}
+};
 
 export const DEFAULT_HOTKEY = "Command+Shift+V";
 export const DEFAULT_WINDOW_SIZE = { width: 400, height: 500 };

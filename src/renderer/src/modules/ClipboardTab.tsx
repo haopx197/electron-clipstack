@@ -2,16 +2,20 @@ import { useCallback, useEffect, useState } from "react";
 import styled from "styled-components";
 
 import type { ClipboardItem } from "../types";
-import { Button } from "../components";
+import { Button, Empty, Typography } from "../components";
 import { ClipboardItemRow } from ".";
 
 export function ClipboardTab(): React.JSX.Element {
     const [items, setItems] = useState<ClipboardItem[]>([]);
+    const [maxClips, setMaxClips] = useState<number | null>(null);
 
     useEffect(() => {
         let cancelled = false;
         void window.clipstack.getItems().then((data) => {
             if (!cancelled) setItems(data);
+        });
+        void window.clipstack.getMaxClips().then((n) => {
+            if (!cancelled) setMaxClips(n);
         });
         const off = window.clipstack.onItemsUpdated((next) => setItems(next));
         return () => {
@@ -45,9 +49,15 @@ export function ClipboardTab(): React.JSX.Element {
     return (
         <>
             <Header>
-                <Count>
-                    {items.length} {items.length === 1 ? "clip" : "clips"}
-                </Count>
+                <CountGroup>
+                    <Typography>
+                        {items.length}
+                        {maxClips !== null ? ` / ${maxClips}` : ""} {items.length === 1 ? "clip" : "clips"}
+                    </Typography>
+                    {maxClips !== null ? (
+                        <Typography size={12}>Older unpinned clips are auto-removed past {maxClips}.</Typography>
+                    ) : null}
+                </CountGroup>
                 <Button variant="secondary" danger onClick={handleClearAll} disabled={!canClear}>
                     Clear All
                 </Button>
@@ -81,20 +91,15 @@ const Header = styled.div`
     flex-shrink: 0;
 `;
 
-const Count = styled.span`
-    color: var(--color-text);
+const CountGroup = styled.div`
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
 `;
 
 const List = styled.div`
     flex: 1;
     overflow-y: auto;
     padding: 4px 0;
-`;
-
-const Empty = styled.div`
-    padding: 32px 16px;
-    text-align: center;
-    color: var(--color-text);
-    opacity: 0.7;
-    font-size: 12px;
 `;

@@ -35,7 +35,7 @@ const StyledInput = styled.input<{ $error: boolean }>`
     width: 100%;
     height: 44px;
     padding-inline: 16px;
-    border-radius: 16px;
+    border-radius: 12px;
     border: 1px solid ${(p) => (p.$error ? "var(--color-error)" : "var(--color-border)")};
     color: var(--color-text-strong);
     font-family: var(--font);

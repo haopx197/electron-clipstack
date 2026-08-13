@@ -11,10 +11,10 @@ import {
 } from "../shared/types";
 import { deleteImageFile } from "./images";
 
-interface Schema {
+type Schema = {
     items: ClipboardItem[];
     settings: AppSettings;
-}
+};
 
 const store = new Store<Schema>({
     name: "clipstack",
@@ -65,13 +65,13 @@ export function getItems(): ClipboardItem[] {
     return sortItems(readItems());
 }
 
-export interface NewItemInput {
+export type NewItemInput = {
     type: ClipboardItemType;
     content: string;
     preview?: string;
     bookmarkTitle?: string;
     fileName?: string;
-}
+};
 
 export function addItem(input: NewItemInput): ClipboardItem[] {
     const items = readItems();

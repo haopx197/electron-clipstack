@@ -1,7 +1,7 @@
 import { ipcMain, clipboard, nativeImage, BrowserWindow, app } from "electron";
 import { readFileSync } from "fs";
 import { IPC } from "../shared/ipc";
-import { getItems, pinItem, deleteItem, clearAll, findItem, getHotkey } from "./store";
+import { getItems, pinItem, deleteItem, clearAll, findItem, getHotkey, getMaxClips, setMaxClips } from "./store";
 import { markClipboardAsCurrent } from "./clipboardWatcher";
 import { simulatePasteViaHelper } from "./helper";
 import { changeHotkey } from "./hotkey";
@@ -153,6 +153,13 @@ export function registerIpcHandlers(): void {
 
     ipcMain.handle(IPC.SettingsGetHotkey, () => getHotkey());
     ipcMain.handle(IPC.SettingsSetHotkey, (_e, accelerator: string) => changeHotkey(accelerator));
+
+    ipcMain.handle(IPC.SettingsGetMaxClips, () => getMaxClips());
+    ipcMain.handle(IPC.SettingsSetMaxClips, (_e, n: number) => {
+        const items = setMaxClips(n);
+        broadcastItemsUpdated();
+        return { maxClips: getMaxClips(), items };
+    });
 
     ipcMain.handle(IPC.WindowHide, () => hideWindow());
 }

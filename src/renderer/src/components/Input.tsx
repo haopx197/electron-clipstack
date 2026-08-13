@@ -33,18 +33,30 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(function Inp
 const StyledInput = styled.input<{ $error: boolean }>`
     display: block;
     width: 100%;
-    height: 50px;
-    padding-inline: 12px;
+    height: 44px;
+    padding-inline: 16px;
     border-radius: 16px;
     border: 1px solid ${(p) => (p.$error ? "var(--color-error)" : "var(--color-border)")};
     color: var(--color-text-strong);
+    font-family: var(--font);
     font-size: inherit;
-    font-weight: 500;
+    font-weight: 400;
     outline: none;
     cursor: pointer;
     transition:
         border-color 0.12s ease,
         box-shadow 0.12s ease;
+
+    &::-webkit-outer-spin-button,
+    &::-webkit-inner-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+    }
+
+    &[type="number"] {
+        -moz-appearance: textfield;
+        appearance: textfield;
+    }
 
     &:focus {
         border-color: var(--color-primary);

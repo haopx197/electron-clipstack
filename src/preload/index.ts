@@ -13,6 +13,10 @@ const clipstack = {
     setHotkey: (accelerator: string): Promise<SetHotkeyResult> =>
         ipcRenderer.invoke(IPC.SettingsSetHotkey, accelerator),
 
+    getMaxClips: (): Promise<number> => ipcRenderer.invoke(IPC.SettingsGetMaxClips),
+    setMaxClips: (n: number): Promise<{ maxClips: number; items: ClipboardItem[] }> =>
+        ipcRenderer.invoke(IPC.SettingsSetMaxClips, n),
+
     hideWindow: (): Promise<void> => ipcRenderer.invoke(IPC.WindowHide),
 
     onItemsUpdated: (cb: (items: ClipboardItem[]) => void): (() => void) => {

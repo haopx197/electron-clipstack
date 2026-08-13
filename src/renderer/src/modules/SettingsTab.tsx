@@ -1,8 +1,11 @@
-import { KeyboardEvent, useEffect, useRef, useState } from "react";
+import { ChangeEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
 import styled from "styled-components";
 
 import { Input } from "@renderer/components";
 import { IconInformationCircle } from "@renderer/SVGs";
+
+const MIN_MAX_CLIPS = 1;
+const MAX_MAX_CLIPS = 200;
 
 const MODIFIER_KEYS = new Set(["Control", "Shift", "Alt", "Meta"]);
 
@@ -62,13 +65,23 @@ function humanize(accel: string): string {
         .join(" ");
 }
 
+function clampMaxClips(n: number): number {
+    if (!Number.isFinite(n)) return MIN_MAX_CLIPS;
+    const rounded = Math.floor(n);
+    if (rounded < MIN_MAX_CLIPS) return MIN_MAX_CLIPS;
+    if (rounded > MAX_MAX_CLIPS) return MAX_MAX_CLIPS;
+    return rounded;
+}
+
 export function SettingsTab(): React.JSX.Element {
     const [accel, setAccel] = useState<string>("");
     const [error, setError] = useState<string | null>(null);
+    const [maxClips, setMaxClipsState] = useState<string>("");
     const inputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
         void window.clipstack.getHotkey().then(setAccel);
+        void window.clipstack.getMaxClips().then((n) => setMaxClipsState(String(n)));
         inputRef.current?.focus();
     }, []);
 
@@ -86,6 +99,23 @@ export function SettingsTab(): React.JSX.Element {
         }
     };
 
+    const onMaxClipsChange = (e: ChangeEvent<HTMLInputElement>): void => {
+        setMaxClipsState(e.target.value);
+    };
+
+    const commitMaxClips = async (): Promise<void> => {
+        const parsed = parseInt(maxClips, 10);
+        const next = clampMaxClips(Number.isNaN(parsed) ? MIN_MAX_CLIPS : parsed);
+        const res = await window.clipstack.setMaxClips(next);
+        setMaxClipsState(String(res.maxClips));
+    };
+
+    const onMaxClipsKeyDown = (e: KeyboardEvent<HTMLInputElement>): void => {
+        if (e.key === "Enter") {
+            e.currentTarget.blur();
+        }
+    };
+
     return (
         <Wrapper>
             <Input
@@ -98,10 +128,26 @@ export function SettingsTab(): React.JSX.Element {
                 readOnly
                 onKeyDown={onKeyDown}
             />
+            <Spacer />
+            <Input
+                label={`Max clips (${MIN_MAX_CLIPS}–${MAX_MAX_CLIPS})`}
+                labelIcon={<IconInformationCircle />}
+                type="number"
+                min={MIN_MAX_CLIPS}
+                max={MAX_MAX_CLIPS}
+                value={maxClips}
+                onChange={onMaxClipsChange}
+                onBlur={commitMaxClips}
+                onKeyDown={onMaxClipsKeyDown}
+            />
         </Wrapper>
     );
 }
 
 const Wrapper = styled.div`
     padding: 16px;
+`;
+
+const Spacer = styled.div`
+    height: 16px;
 `;

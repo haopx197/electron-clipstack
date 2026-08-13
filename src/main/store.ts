@@ -1,6 +1,14 @@
 import Store from "electron-store";
 import { v4 as uuid } from "uuid";
-import { AppSettings, ClipboardItem, ClipboardItemType, DEFAULT_HOTKEY, MAX_UNPINNED_ITEMS } from "../shared/types";
+import {
+    AppSettings,
+    ClipboardItem,
+    ClipboardItemType,
+    DEFAULT_HOTKEY,
+    DEFAULT_MAX_CLIPS,
+    MAX_MAX_CLIPS,
+    MIN_MAX_CLIPS
+} from "../shared/types";
 import { deleteImageFile } from "./images";
 
 interface Schema {
@@ -12,9 +20,25 @@ const store = new Store<Schema>({
     name: "clipstack",
     defaults: {
         items: [],
-        settings: { hotkey: DEFAULT_HOTKEY }
+        settings: { hotkey: DEFAULT_HOTKEY, maxClips: DEFAULT_MAX_CLIPS }
     }
 });
+
+function readSettings(): AppSettings {
+    const s = store.get("settings") as Partial<AppSettings> | undefined;
+    return {
+        hotkey: s?.hotkey || DEFAULT_HOTKEY,
+        maxClips: clampMaxClips(s?.maxClips ?? DEFAULT_MAX_CLIPS)
+    };
+}
+
+function clampMaxClips(n: number): number {
+    if (!Number.isFinite(n)) return DEFAULT_MAX_CLIPS;
+    const rounded = Math.floor(n);
+    if (rounded < MIN_MAX_CLIPS) return MIN_MAX_CLIPS;
+    if (rounded > MAX_MAX_CLIPS) return MAX_MAX_CLIPS;
+    return rounded;
+}
 
 function readItems(): ClipboardItem[] {
     return store.get("items") as ClipboardItem[];
@@ -83,9 +107,10 @@ export function addItem(input: NewItemInput): ClipboardItem[] {
     const unpinned = items.filter((i) => !i.pinned).sort((a, b) => b.createdAt - a.createdAt);
     const pinned = items.filter((i) => i.pinned);
 
-    if (unpinned.length > MAX_UNPINNED_ITEMS) {
-        const kept = unpinned.slice(0, MAX_UNPINNED_ITEMS);
-        const dropped = unpinned.slice(MAX_UNPINNED_ITEMS);
+    const cap = readSettings().maxClips;
+    if (unpinned.length > cap) {
+        const kept = unpinned.slice(0, cap);
+        const dropped = unpinned.slice(cap);
         for (const d of dropped) cleanupOwnedFiles(d);
         writeItems([...pinned, ...kept]);
         return sortItems([...pinned, ...kept]);
@@ -93,6 +118,19 @@ export function addItem(input: NewItemInput): ClipboardItem[] {
 
     writeItems(items);
     return sortItems(items);
+}
+
+function trimUnpinnedToCap(cap: number): ClipboardItem[] {
+    const items = readItems();
+    const pinned = items.filter((i) => i.pinned);
+    const unpinned = items.filter((i) => !i.pinned).sort((a, b) => b.createdAt - a.createdAt);
+    if (unpinned.length <= cap) return sortItems(items);
+    const kept = unpinned.slice(0, cap);
+    const dropped = unpinned.slice(cap);
+    for (const d of dropped) cleanupOwnedFiles(d);
+    const next = [...pinned, ...kept];
+    writeItems(next);
+    return sortItems(next);
 }
 
 export function pinItem(id: string): ClipboardItem[] {
@@ -135,11 +173,21 @@ export function findItem(id: string): ClipboardItem | undefined {
 }
 
 export function getHotkey(): string {
-    const settings = store.get("settings") as AppSettings;
-    return settings.hotkey || DEFAULT_HOTKEY;
+    return readSettings().hotkey;
 }
 
 export function setHotkey(hotkey: string): void {
-    const settings = store.get("settings") as AppSettings;
+    const settings = readSettings();
     store.set("settings", { ...settings, hotkey });
+}
+
+export function getMaxClips(): number {
+    return readSettings().maxClips;
+}
+
+export function setMaxClips(n: number): ClipboardItem[] {
+    const cap = clampMaxClips(n);
+    const settings = readSettings();
+    store.set("settings", { ...settings, maxClips: cap });
+    return trimUnpinnedToCap(cap);
 }

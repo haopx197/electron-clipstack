@@ -93,24 +93,81 @@ function sha1(input: string | Buffer): string {
 }
 
 /**
- * Lấy real POSIX path của file đầu tiên trên pasteboard.
+ * Lấy real POSIX paths của MỌI file trên pasteboard (Finder multi-select).
  *
  * Ưu tiên cache do helper Swift push qua NSURL — bắt được cả file-reference URL
  * dạng `/.file/id=<inode>` mà POSIX `open()` từ chối. Fallback đọc `public.file-url`
- * trực tiếp bằng Electron API khi helper chưa spawn / chưa cấp Accessibility.
+ * trực tiếp bằng Electron API khi helper chưa spawn / chưa cấp Accessibility
+ * (fallback CHỈ trả 1 path — Electron `readBuffer` không expose multi-URL list).
  */
-function readFirstFilePath(): string | null {
+function readAllFilePaths(): string[] {
     const cached = getPasteboardFilePaths();
-    if (cached.length > 0) return cached[0];
+    if (cached.length > 0) return cached;
     try {
         const buf = clipboard.readBuffer("public.file-url");
-        if (!buf || buf.length === 0) return null;
+        if (!buf || buf.length === 0) return [];
         const url = buf.toString("utf8").trim().replace(/\0+$/, "");
-        if (!url.startsWith("file://")) return null;
-        return decodeURIComponent(url.replace(/^file:\/\//, ""));
+        if (!url.startsWith("file://")) return [];
+        return [decodeURIComponent(url.replace(/^file:\/\//, ""))];
     } catch {
-        return null;
+        return [];
     }
+}
+
+/** Save action for a single file path from pasteboard (image sniff or plain file). */
+function buildFileSave(rawPath: string): () => void {
+    let bytes: Buffer | null = null;
+    try {
+        bytes = readFileSync(rawPath);
+    } catch {
+        // fall through to plain file
+    }
+    if (bytes && bytes.length > 0) {
+        const sniff = sniffImageFormat(bytes);
+        if (sniff && !sniff.needsConversion) {
+            const contentBytes = bytes;
+            const ext = sniff.ext;
+            return () => {
+                const path = saveImageBytes(contentBytes, ext);
+                addItem({ type: "image", content: path });
+            };
+        }
+        if (sniff && sniff.needsConversion) {
+            const img = nativeImage.createFromBuffer(bytes);
+            if (!img.isEmpty()) {
+                const png = img.toPNG();
+                if (png.length > 0) {
+                    return () => {
+                        const path = saveImage(nativeImage.createFromBuffer(png));
+                        addItem({ type: "image", content: path });
+                    };
+                }
+            }
+        }
+    }
+    const displayPath = tryRealpath(rawPath);
+    return () => addItem({ type: "file", content: displayPath, fileName: basename(displayPath) });
+}
+
+/** Signature contribution for a single file path (image hash if image, else file path). */
+function buildFileSig(rawPath: string): string {
+    let bytes: Buffer | null = null;
+    try {
+        bytes = readFileSync(rawPath);
+    } catch {
+        return `file:${tryRealpath(rawPath)}`;
+    }
+    if (bytes.length === 0) return `file:${tryRealpath(rawPath)}`;
+    const sniff = sniffImageFormat(bytes);
+    if (sniff && !sniff.needsConversion) return `img:${sha1(bytes)}`;
+    if (sniff && sniff.needsConversion) {
+        const img = nativeImage.createFromBuffer(bytes);
+        if (!img.isEmpty()) {
+            const png = img.toPNG();
+            if (png.length > 0) return `img:${sha1(png)}`;
+        }
+    }
+    return `file:${tryRealpath(rawPath)}`;
 }
 
 function readBookmarkSafe(): { title: string; url: string } | null {
@@ -154,57 +211,22 @@ function captureCurrent(): { sig: string; save: () => void } | null {
 
 
     // 1) File copy từ Finder — kể cả khi kèm image preview, luôn ưu tiên file gốc.
-    //    Đọc bytes → sniff magic:
+    //    Multi-select được: iterate mọi path, mỗi path sniff magic độc lập:
     //      • Format browser render được (PNG/JPEG/GIF/BMP/WEBP/SVG/ICO/AVIF) → save raw
     //      • Format cần convert (TIFF/HEIC) → nativeImage → PNG
     //      • Không phải ảnh → file (giữ path, không copy nội dung)
+    //    Iterate reversed để paths[0] có createdAt cao nhất → nằm trên đầu batch.
     if (has("public.file-url")) {
-        const rawPath = readFirstFilePath();
-        if (rawPath) {
-            let bytes: Buffer | null = null;
-            try {
-                bytes = readFileSync(rawPath);
-            } catch {
-                // fall through to file case
-            }
-            if (bytes && bytes.length > 0) {
-                const sniff = sniffImageFormat(bytes);
-                if (sniff && !sniff.needsConversion) {
-                    const contentBytes = bytes;
-                    const ext = sniff.ext;
-                    const sig = `img:${sha1(contentBytes)}`;
-                    return {
-                        sig,
-                        save: () => {
-                            const path = saveImageBytes(contentBytes, ext);
-                            addItem({ type: "image", content: path });
-                        }
-                    };
-                }
-                if (sniff && sniff.needsConversion) {
-                    const img = nativeImage.createFromBuffer(bytes);
-                    if (!img.isEmpty()) {
-                        const png = img.toPNG();
-                        if (png.length > 0) {
-                            const sig = `img:${sha1(png)}`;
-                            return {
-                                sig,
-                                save: () => {
-                                    const path = saveImage(nativeImage.createFromBuffer(png));
-                                    addItem({ type: "image", content: path });
-                                }
-                            };
-                        }
-                    }
-                }
-            }
-            // File thường. Resolve real path cho display; fail thì fallback raw path.
-            const displayPath = tryRealpath(rawPath);
-            const sig = `file:${displayPath}`;
+        const paths = readAllFilePaths();
+        if (paths.length > 0) {
+            const perFile = paths.map((p) => ({ sig: buildFileSig(p), save: buildFileSave(p) }));
+            const combinedSig =
+                perFile.length === 1 ? perFile[0].sig : `multi:${sha1(perFile.map((p) => p.sig).join("|"))}`;
             return {
-                sig,
-                save: () =>
-                    addItem({ type: "file", content: displayPath, fileName: basename(displayPath) })
+                sig: combinedSig,
+                save: () => {
+                    for (let i = perFile.length - 1; i >= 0; i--) perFile[i].save();
+                }
             };
         }
     }

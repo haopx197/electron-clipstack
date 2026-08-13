@@ -7,6 +7,8 @@ export const IPC = {
     ClipboardItemsUpdated: "clipboard:items-updated",
     SettingsGetHotkey: "settings:get-hotkey",
     SettingsSetHotkey: "settings:set-hotkey",
+    SettingsGetMaxClips: "settings:get-max-clips",
+    SettingsSetMaxClips: "settings:set-max-clips",
     WindowHide: "window:hide"
 } as const;
 

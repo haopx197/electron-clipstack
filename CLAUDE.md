@@ -218,24 +218,41 @@ npm run build:mac    # typecheck + build + electron-builder → file .dmg trong 
 
 **Không hỗ trợ iOS/iPadOS** — Electron chỉ chạy desktop (macOS/Windows/Linux), không port qua iOS.
 
-### Build cho cả 2 kiến trúc (universal DMG)
+### Build 2 DMG riêng: Apple Silicon + Intel
 
-Mặc định `electron-builder` build theo arch máy build (chỉ arm64 hoặc chỉ x64 → chỉ máy tương ứng chạy được). Muốn 1 DMG chạy cả Intel + Apple Silicon → thêm vào [electron-builder.yml](electron-builder.yml):
+Cấu hình sẵn ở [electron-builder.yml](electron-builder.yml) → `npm run build:mac` xuất **2 file DMG** trong `dist/`:
+
+```
+clipstack-1.0.0-arm64.dmg   # cho Mac M-series (M1/M2/M3/M4)
+clipstack-1.0.0-x64.dmg     # cho Mac Intel
+```
+
+**Điều kiện tiên quyết**: Swift helper phải là **universal binary** (chứa cả arm64 + x64 slice). Script `build:helper:universal` compile 2 lần với `-target arm64-apple-macos11` và `-target x86_64-apple-macos11` rồi `lipo -create` gộp lại. `npm run build:mac` đã tự chạy step này.
+
+Kiểm tra helper universal:
+
+```bash
+file resources/ClipStackHelper
+# → Mach-O universal binary with 2 architectures: [x86_64:...] [arm64:...]
+```
+
+**Build chỉ 1 arch** (nhanh hơn, dùng khi test):
+
+```bash
+npm run build:mac:arm64   # chỉ M-series
+npm run build:mac:x64     # chỉ Intel
+```
+
+**Alternative: universal DMG duy nhất** (1 file chạy cả 2 arch, size ~2x):
 
 ```yaml
 mac:
     target:
         - target: dmg
-          arch:
-              - x64
-              - arm64
-    # HOẶC 1 file universal duy nhất:
-    # target:
-    #     - target: dmg
-    #       arch: universal
+          arch: universal
 ```
 
-Trade-off: `universal` gấp đôi size (~300 MB DMG); riêng lẻ 2 arch xuất ra 2 file nhỏ hơn nhưng user phải chọn đúng.
+Trade-off: universal DMG gấp đôi size (~300 MB) — 2 arch riêng nhỏ hơn nhưng user phải chọn đúng khi tải về.
 
 ## 8. Checklist thứ tự implement (đề xuất)
 

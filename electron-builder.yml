@@ -22,7 +22,10 @@ mac:
     category: public.app-category.utilities
     minimumSystemVersion: "11.0"
     target:
-        - dmg
+        - target: dmg
+          arch:
+              - arm64
+              - x64
     entitlementsInherit: build/entitlements.mac.plist
     extendInfo:
         - LSUIElement: true
@@ -30,7 +33,8 @@ mac:
         - NSAccessibilityUsageDescription: ClipStack simulates ⌘V to paste your selected clipboard item into the active app.
     notarize: false
 dmg:
-    artifactName: ${name}-${version}.${ext}
+    # ${arch} = arm64 / x64 → xuất 2 file DMG riêng, không đè nhau.
+    artifactName: ${name}-${version}-${arch}.${ext}
 linux:
     target:
         - AppImage

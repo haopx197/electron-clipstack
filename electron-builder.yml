@@ -21,6 +21,7 @@ nsis:
 mac:
     category: public.app-category.utilities
     minimumSystemVersion: "11.0"
+    identity: null    # ad-hoc sign (không cần Developer ID $99/năm)
     target:
         - target: dmg
           arch:

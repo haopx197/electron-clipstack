@@ -29,12 +29,12 @@ export function Button({
 
 const variantStyles = {
     primary: css`
-        background-color: #0493e5;
+        background-color: #ffb11a;
         color: #fff;
         padding-inline: 12px;
     `,
     secondary: css`
-        background-color: rgba(4, 147, 229, 0.2);
+        background-color: rgba(255, 177, 26, 0.4);
         color: #000;
         padding-inline: 12px;
     `,

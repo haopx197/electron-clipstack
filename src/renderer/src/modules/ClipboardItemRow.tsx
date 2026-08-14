@@ -87,7 +87,7 @@ export function ClipboardItemRow({ item, onPaste, onPin, onDelete }: Props) {
                     }}
                     aria-label={item.pinned ? "Unpin item" : "Pin item"}
                 >
-                    {item.pinned ? <IconPinOff color="#0493e5" /> : <IconPin />}
+                    {item.pinned ? <IconPinOff color="#ffb11a" /> : <IconPin />}
                 </Button>
                 <Button
                     variant="icon"

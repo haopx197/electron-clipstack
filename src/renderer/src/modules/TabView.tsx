@@ -29,16 +29,16 @@ export function TabView(): React.JSX.Element {
             <TabBar role="tablist">
                 <TabGroup>
                     <TabButton role="tab" aria-selected={tab === "clipboard"} onClick={() => setTab("clipboard")}>
-                        <IconSelect color={tab === "clipboard" ? "#0493e5" : "#141B34"} />
+                        <IconSelect color={tab === "clipboard" ? "#ffb11a" : "#141B34"} />
                         {tab === "clipboard" && <TabActive />}
                     </TabButton>
                     <TabButton role="tab" aria-selected={tab === "icons"} onClick={() => setTab("icons")}>
-                        <IconPaintBoard color={tab === "icons" ? "#0493e5" : "#141B34"} />
+                        <IconPaintBoard color={tab === "icons" ? "#ffb11a" : "#141B34"} />
                         {tab === "icons" && <TabActive />}
                     </TabButton>
                 </TabGroup>
                 <TabButton role="tab" aria-selected={tab === "settings"} onClick={() => setTab("settings")}>
-                    <IconSettings color={tab === "settings" ? "#0493e5" : "#141B34"} />
+                    <IconSettings color={tab === "settings" ? "#ffb11a" : "#141B34"} />
                 </TabButton>
             </TabBar>
             {tab === "clipboard" && <ClipboardTab />}
@@ -75,5 +75,5 @@ const TabActive = styled.div`
     right: 0;
     bottom: -2px;
     height: 2px;
-    background-color: var(--color-primary);
+    background-color: #ffb11a;
 `;

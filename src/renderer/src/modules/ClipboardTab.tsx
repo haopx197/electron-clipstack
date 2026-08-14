@@ -58,9 +58,11 @@ export function ClipboardTab(): React.JSX.Element {
                         <Typography size={12}>Older unpinned clips are auto-removed past {maxClips}.</Typography>
                     ) : null}
                 </CountGroup>
-                <Button variant="secondary" danger onClick={handleClearAll} disabled={!canClear}>
-                    Clear All
-                </Button>
+                {canClear && (
+                    <Button variant="secondary" danger onClick={handleClearAll}>
+                        Clear All
+                    </Button>
+                )}
             </Header>
             <List>
                 {items.length === 0 ? (

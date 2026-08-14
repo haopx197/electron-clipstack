@@ -21,11 +21,11 @@ nsis:
 mac:
     category: public.app-category.utilities
     minimumSystemVersion: "11.0"
-    # Bỏ trống identity + set CSC_IDENTITY_AUTO_DISCOVERY=false lúc build →
-    # electron-builder / electron-osx-sign sẽ ad-hoc sign đúng cách (từng framework,
-    # helper, main executable riêng), tương thích Electron ASAR integrity check.
-    # KHÔNG dùng `identity: null` (skip sign hoàn toàn) hoặc `codesign --deep --force`
-    # thủ công — cả 2 đều gây `task_name_for_pid: (os/kern) failure (5)`.
+    # Build unsigned: set `CSC_IDENTITY_AUTO_DISCOVERY=false` khi chạy `npm run
+    # build:mac`. install.sh dùng `xattr -cr` để tránh cảnh báo Gatekeeper.
+    # KHÔNG hardcode `identity: null` (skip sign hoàn toàn tạo bundle broken) và
+    # KHÔNG chạy `codesign --deep --force` thủ công trên .app — cả 2 gây
+    # `task_name_for_pid: (os/kern) failure (5)` khi app khởi động.
     target:
         - target: dmg
           arch:

@@ -9,7 +9,10 @@ export const IPC = {
     SettingsSetHotkey: "settings:set-hotkey",
     SettingsGetMaxClips: "settings:get-max-clips",
     SettingsSetMaxClips: "settings:set-max-clips",
-    WindowHide: "window:hide"
+    WindowHide: "window:hide",
+    SystemAccessibilityStatus: "system:accessibility-status",
+    SystemOpenAccessibilitySettings: "system:open-accessibility-settings",
+    SystemRelaunch: "system:relaunch"
 } as const;
 
 export type IpcChannel = (typeof IPC)[keyof typeof IPC];

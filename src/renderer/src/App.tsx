@@ -1,10 +1,12 @@
 import styled from "styled-components";
 
+import { AccessibilityBanner } from "./components";
 import { TabView } from "./modules";
 
 function App(): React.JSX.Element {
     return (
         <AppShell>
+            <AccessibilityBanner />
             <TabView />
         </AppShell>
     );

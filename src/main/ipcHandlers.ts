@@ -1,4 +1,4 @@
-import { ipcMain, clipboard, nativeImage, app } from "electron";
+import { ipcMain, clipboard, nativeImage, app, systemPreferences, shell } from "electron";
 import { readFileSync } from "fs";
 import { IPC } from "../shared/ipc";
 import { getItems, pinItem, deleteItem, clearAll, findItem, getHotkey, getMaxClips, setMaxClips } from "./store";
@@ -123,6 +123,20 @@ export function registerIpcHandlers(): void {
 
     ipcMain.handle(IPC.SettingsGetHotkey, () => getHotkey());
     ipcMain.handle(IPC.SettingsSetHotkey, (_e, accelerator: string) => changeHotkey(accelerator));
+
+    // isTrustedAccessibilityClient(false) = check-only, không trigger native prompt.
+    ipcMain.handle(IPC.SystemAccessibilityStatus, () =>
+        systemPreferences.isTrustedAccessibilityClient(false)
+    );
+    ipcMain.handle(IPC.SystemOpenAccessibilitySettings, () =>
+        shell.openExternal(
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
+        )
+    );
+    ipcMain.handle(IPC.SystemRelaunch, () => {
+        app.relaunch();
+        app.exit(0);
+    });
 
     ipcMain.handle(IPC.SettingsGetMaxClips, () => getMaxClips());
     ipcMain.handle(IPC.SettingsSetMaxClips, (_e, n: number) => {

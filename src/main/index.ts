@@ -8,7 +8,6 @@ import { ensureScreenshotTargetIsClipboard } from "./screencapture";
 import { registerIpcHandlers, broadcastItemsUpdated } from "./ipcHandlers";
 import { startClipboardWatcher, stopClipboardWatcher } from "./clipboardWatcher";
 import { startHelper } from "./helper";
-import { ensureAccessibilityPermission } from "./accessibility";
 
 // Register privileged custom scheme for local clipboard image thumbnails.
 // Must be called BEFORE app.whenReady().
@@ -44,9 +43,6 @@ app.whenReady().then(() => {
     // thuần vì affect toàn bộ activation policy (Cmd+Tab không show, click window
     // không steal full focus như regular app).
     app.setActivationPolicy("accessory");
-
-    // Gate: không có Accessibility → dialog → quit. Không setup tray/window.
-    if (!ensureAccessibilityPermission()) return;
 
     // Serve clip-image://local/<absolute-path> from disk (safely).
     protocol.handle("clip-image", async (request) => {

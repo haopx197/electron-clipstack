@@ -4,3 +4,4 @@ export * from "./Typography";
 export * from "./Flex";
 export * from "./Input";
 export * from "./Empty";
+export * from "./AccessibilityBanner";

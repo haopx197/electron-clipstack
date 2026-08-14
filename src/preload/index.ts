@@ -19,6 +19,11 @@ const clipstack = {
 
     hideWindow: (): Promise<void> => ipcRenderer.invoke(IPC.WindowHide),
 
+    getAccessibilityStatus: (): Promise<boolean> => ipcRenderer.invoke(IPC.SystemAccessibilityStatus),
+    openAccessibilitySettings: (): Promise<void> =>
+        ipcRenderer.invoke(IPC.SystemOpenAccessibilitySettings),
+    relaunch: (): Promise<void> => ipcRenderer.invoke(IPC.SystemRelaunch),
+
     onItemsUpdated: (cb: (items: ClipboardItem[]) => void): (() => void) => {
         const listener = (_e: IpcRendererEvent, items: ClipboardItem[]): void => cb(items);
         ipcRenderer.on(IPC.ClipboardItemsUpdated, listener);

@@ -29,12 +29,12 @@ export function Button({
 
 const variantStyles = {
     primary: css`
-        background-color: #ffb11a;
+        background-color: var(--color-primary);
         color: #fff;
         padding-inline: 12px;
     `,
     secondary: css`
-        background-color: rgba(255, 177, 26, 0.4);
+        background-color: color-mix(in srgb, var(--color-primary) 40%, transparent);
         color: #000;
         padding-inline: 12px;
     `,
@@ -70,7 +70,7 @@ const StyledButton = styled.button<{ $variant: Variant; $danger: boolean }>`
     ${(p) =>
         p.$danger &&
         css`
-            background-color: rgba(221, 69, 88, 0.2);
-            color: #dd4558;
+            background-color: color-mix(in srgb, var(--color-error) 20%, transparent);
+            color: var(--color-error);
         `}
 `;

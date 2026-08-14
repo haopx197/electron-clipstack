@@ -1,4 +1,4 @@
-import { ipcMain, clipboard, nativeImage, BrowserWindow, app } from "electron";
+import { ipcMain, clipboard, nativeImage, app } from "electron";
 import { readFileSync } from "fs";
 import { IPC } from "../shared/ipc";
 import { getItems, pinItem, deleteItem, clearAll, findItem, getHotkey, getMaxClips, setMaxClips } from "./store";
@@ -138,10 +138,5 @@ export function broadcastItemsUpdated(): void {
     const win = getMainWindow();
     if (win && !win.isDestroyed()) {
         win.webContents.send(IPC.ClipboardItemsUpdated, getItems());
-    }
-    for (const w of BrowserWindow.getAllWindows()) {
-        if (w !== win && !w.isDestroyed()) {
-            w.webContents.send(IPC.ClipboardItemsUpdated, getItems());
-        }
     }
 }

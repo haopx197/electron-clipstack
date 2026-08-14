@@ -10,7 +10,7 @@ const Spinner = styled.svg`
     display: block;
 `;
 
-export function LoadingSpinner({ size = 16, color = "#ffb11a" }: { size?: number; color?: string }) {
+export function LoadingSpinner({ size = 16, color = "var(--color-primary)" }: { size?: number; color?: string }) {
     return (
         <Spinner width={size} height={size} viewBox="0 0 24 24" style={{ color }}>
             <rect x="10.5312" y="0" width="2.94731" height="7.15776" rx="1.47366" fill="currentColor" />

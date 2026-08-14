@@ -60,7 +60,7 @@ const StyledInput = styled.input<{ $error: boolean }>`
 
     &:focus {
         border-color: var(--color-primary);
-        box-shadow: 0 0 0 3px rgba(255, 177, 26, 0.15);
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 15%, transparent);
     }
 
     ${(p) =>
@@ -68,7 +68,7 @@ const StyledInput = styled.input<{ $error: boolean }>`
         css`
             &:focus {
                 border-color: var(--color-error);
-                box-shadow: 0 0 0 3px rgba(221, 69, 88, 0.15);
+                box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-error) 15%, transparent);
             }
         `}
 `;

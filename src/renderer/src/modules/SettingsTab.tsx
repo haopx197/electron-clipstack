@@ -3,9 +3,7 @@ import styled from "styled-components";
 
 import { Input } from "@renderer/components";
 import { IconInformationCircle } from "@renderer/SVGs";
-
-const MIN_MAX_CLIPS = 1;
-const MAX_MAX_CLIPS = 200;
+import { MIN_MAX_CLIPS, MAX_MAX_CLIPS } from "../../../shared/types";
 
 const MODIFIER_KEYS = new Set(["Control", "Shift", "Alt", "Meta"]);
 

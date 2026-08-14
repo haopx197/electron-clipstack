@@ -2,16 +2,12 @@ import { createGlobalStyle } from "styled-components";
 
 export const GlobalStyles = createGlobalStyle`
     :root {
-        --color-success: #77cc1a;
-        --color-error: #dd4558;
-        --color-info: #ef8611;
-        --color-text: #141B34;
-        --color-border: #DADADB;
-        --color-handle: #c1c1c1;
         --color-primary: #ffb11a;
-
-        --color-bg: #ffffff;
+        --color-error: #dd4558;
+        --color-text: #141B34;
         --color-text-strong: #2b2d31;
+        --color-border: #DADADB;
+        --color-bg: #ffffff;
 
         --font: "Google Sans", -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
     }

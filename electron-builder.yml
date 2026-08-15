@@ -39,8 +39,9 @@ mac:
         - NSAccessibilityUsageDescription: ClipStack simulates ⌘V to paste your selected clipboard item into the active app.
     notarize: false
 dmg:
-    # ${arch} = arm64 / x64 → produce two separate DMGs (no overwrite).
-    artifactName: ${name}-${version}-${arch}.${ext}
+    # Stable filename (no version) → install.sh can hit the same URL across
+    # releases and GitHub `/releases/latest/download/` never 404s.
+    artifactName: ${name}-${arch}.${ext}
 linux:
     target:
         - AppImage

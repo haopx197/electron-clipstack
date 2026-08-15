@@ -7,7 +7,7 @@ type EmptyProps = {
     children?: ReactNode;
 };
 
-export function Empty({ children }: EmptyProps): React.JSX.Element {
+export function Empty({ children }: EmptyProps) {
     return (
         <Wrapper>
             <Image src={emptyImage} alt="empty" />

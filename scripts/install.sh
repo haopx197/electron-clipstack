@@ -3,13 +3,12 @@ set -euo pipefail
 
 REPO="haopx197/electron-clipstack"
 APP_NAME="ClipStack"
-VERSION="1.0.0"
 
 # ANSI colors (fall back to no-color when stdout isn't a TTY).
 if [[ -t 1 ]]; then
-    C_BOLD="\033[1m"; C_DIM="\033[2m"; C_YELLOW="\033[33m"; C_GREEN="\033[32m"; C_RESET="\033[0m"
+    C_BOLD="\033[1m"; C_DIM="\033[2m"; C_YELLOW="\033[33m"; C_GREEN="\033[32m"; C_CYAN="\033[36m"; C_RESET="\033[0m"
 else
-    C_BOLD=""; C_DIM=""; C_YELLOW=""; C_GREEN=""; C_RESET=""
+    C_BOLD=""; C_DIM=""; C_YELLOW=""; C_GREEN=""; C_CYAN=""; C_RESET=""
 fi
 
 if [[ "$(uname)" != "Darwin" ]]; then
@@ -19,12 +18,40 @@ fi
 
 ARCH="$(uname -m)"
 case "$ARCH" in
-    arm64)  DMG="clipstack-${VERSION}-arm64.dmg" ;;
-    x86_64) DMG="clipstack-${VERSION}-x64.dmg" ;;
+    arm64)  DMG="clipstack-arm64.dmg" ;;
+    x86_64) DMG="clipstack-x64.dmg" ;;
     *) echo "Unsupported architecture: $ARCH" >&2; exit 1 ;;
 esac
 
 URL="https://github.com/${REPO}/releases/latest/download/${DMG}"
+API_URL="https://api.github.com/repos/${REPO}/releases/latest"
+
+# --- Version detection -----------------------------------------------------
+
+# Latest release tag from GitHub API (strip leading `v`). Empty on network fail.
+LATEST_VERSION="$(
+    curl -fsSL "$API_URL" 2>/dev/null \
+        | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("tag_name","").lstrip("v"))' \
+        2>/dev/null || true
+)"
+
+# Installed version from bundle Info.plist. Empty when not installed.
+INSTALLED_VERSION=""
+if [[ -d "/Applications/${APP_NAME}.app" ]]; then
+    INSTALLED_VERSION="$(
+        defaults read "/Applications/${APP_NAME}.app/Contents/Info.plist" CFBundleShortVersionString 2>/dev/null || true
+    )"
+fi
+
+# Skip when already at the latest version — unless FORCE=1 requests a reinstall.
+if [[ -n "$INSTALLED_VERSION" && -n "$LATEST_VERSION" && "$INSTALLED_VERSION" == "$LATEST_VERSION" && "${FORCE:-}" != "1" ]]; then
+    echo ""
+    echo -e "${C_GREEN}✓ ${APP_NAME} v${INSTALLED_VERSION} is already installed.${C_RESET}"
+    echo -e "${C_DIM}Re-run with ${C_BOLD}FORCE=1${C_RESET}${C_DIM} to reinstall:"
+    echo -e "  FORCE=1 bash <(curl -fsSL https://github.com/${REPO}/releases/latest/download/install.sh)${C_RESET}"
+    exit 0
+fi
+
 TMP_DMG="$(mktemp -t clipstack).dmg"
 MOUNT_POINT=""
 
@@ -36,15 +63,20 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# Upfront expectation — download is ~110MB and the recursive xattr sweep on
-# Electron's Frameworks tree takes a while. Set the mental model early so the
-# user doesn't think the script is stuck.
+# --- Announce ---------------------------------------------------------------
+
 echo ""
-echo -e "${C_BOLD}Installing ${APP_NAME} for ${ARCH}${C_RESET}"
+if [[ -n "$INSTALLED_VERSION" ]]; then
+    echo -e "${C_BOLD}Upgrading ${APP_NAME} (${ARCH})${C_RESET} ${C_DIM}v${INSTALLED_VERSION} → v${LATEST_VERSION:-latest}${C_RESET}"
+else
+    echo -e "${C_BOLD}Installing ${APP_NAME} (${ARCH})${C_RESET} ${C_DIM}v${LATEST_VERSION:-latest}${C_RESET}"
+fi
 echo -e "${C_DIM}Expected total time: 30 s – 2 min depending on your connection."
 echo -e "  • Download DMG (~110 MB) — most of the wait."
 echo -e "  • Mount, copy to /Applications, clear macOS quarantine.${C_RESET}"
 echo ""
+
+# --- Download + install -----------------------------------------------------
 
 echo -e "${C_YELLOW}→${C_RESET} Downloading DMG… ${C_DIM}(largest step; progress below)${C_RESET}"
 curl -fL --progress-bar "$URL" -o "$TMP_DMG"
@@ -58,7 +90,7 @@ if [[ -z "$MOUNT_POINT" || ! -d "$MOUNT_POINT/${APP_NAME}.app" ]]; then
 fi
 
 if [[ -d "/Applications/${APP_NAME}.app" ]]; then
-    echo -e "${C_YELLOW}→${C_RESET} Removing previous install…"
+    echo -e "${C_YELLOW}→${C_RESET} Removing previous install… ${C_DIM}(user data & clip history preserved)${C_RESET}"
     rm -rf "/Applications/${APP_NAME}.app"
 fi
 

@@ -3,7 +3,6 @@ import { join } from "path";
 import { is } from "@electron-toolkit/utils";
 import { DEFAULT_WINDOW_SIZE } from "../shared/types";
 import { startMouseMonitor, stopMouseMonitor } from "./helper";
-import { getTray } from "./tray";
 
 let mainWindow: BrowserWindow | null = null;
 // Track state via JS variable only. DO NOT use `mainWindow.isVisible()`:
@@ -21,8 +20,9 @@ export function createMainWindow(): BrowserWindow {
         height: DEFAULT_WINDOW_SIZE.height,
         show: false,
         frame: false,
-        // Fixed under tray; user can't drag elsewhere.
-        movable: false,
+        // Movable via renderer drag handle (`-webkit-app-region: drag`).
+        // Position resets to cursor on every show().
+        movable: true,
         resizable: false,
         minimizable: false,
         maximizable: false,
@@ -73,20 +73,35 @@ function onGlobalClick(x: number, y: number): void {
     hideWindow();
 }
 
-// Always position under tray icon (spec LOCKED — CLAUDE.md).
-function positionUnderTray(): void {
+// Position window bottom-right of current cursor. Clamps to the display's
+// work area so the window never spawns off-screen. Small 4px gap so the
+// cursor isn't sitting inside the window on show.
+const CURSOR_GAP = 4;
+
+function positionNearCursor(): void {
     if (!mainWindow) return;
-    const tray = getTray();
-    if (!tray) return;
-    const t = tray.getBounds();
-    const [w] = mainWindow.getSize();
-    mainWindow.setPosition(Math.round(t.x + t.width / 2 - w / 2), Math.round(t.y + t.height + 4));
+    const cursor = screen.getCursorScreenPoint();
+    const display = screen.getDisplayNearestPoint(cursor);
+    const [w, h] = mainWindow.getSize();
+
+    let x = cursor.x + CURSOR_GAP;
+    let y = cursor.y + CURSOR_GAP;
+
+    const wa = display.workArea;
+    // Right/bottom overflow → flip to left/top of cursor so window stays visible.
+    if (x + w > wa.x + wa.width) x = cursor.x - w - CURSOR_GAP;
+    if (y + h > wa.y + wa.height) y = cursor.y - h - CURSOR_GAP;
+    // Final clamp in case flipping also overshoots (tiny displays).
+    x = Math.max(wa.x, Math.min(x, wa.x + wa.width - w));
+    y = Math.max(wa.y, Math.min(y, wa.y + wa.height - h));
+
+    mainWindow.setPosition(Math.round(x), Math.round(y));
 }
 
 export function showWindow(): void {
     if (!mainWindow || visible) return;
     visible = true;
-    positionUnderTray();
+    positionNearCursor();
     // Only unhide when app actually hidden — avoids macOS re-activation animation.
     // Needed after paste (app.hide already ran).
     if (app.isHidden()) app.show();

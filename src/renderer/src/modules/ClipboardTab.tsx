@@ -5,7 +5,7 @@ import type { ClipboardItem } from "../types";
 import { Button, Empty, Typography } from "../components";
 import { ClipboardItemRow } from ".";
 
-export function ClipboardTab(): React.JSX.Element {
+export function ClipboardTab() {
     const [items, setItems] = useState<ClipboardItem[]>([]);
     const [maxClips, setMaxClips] = useState<number | null>(null);
 

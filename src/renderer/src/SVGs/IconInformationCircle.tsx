@@ -1,6 +1,6 @@
 import type { SVGProps } from "react";
 
-export function IconInformationCircle(props: SVGProps<SVGSVGElement>): React.JSX.Element {
+export function IconInformationCircle(props: SVGProps<SVGSVGElement>) {
     return (
         <svg width="32" height="32" viewBox="0 0 32 32" fill="none" {...props}>
             <circle

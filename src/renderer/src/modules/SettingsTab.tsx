@@ -71,7 +71,7 @@ function clampMaxClips(n: number): number {
     return rounded;
 }
 
-export function SettingsTab(): React.JSX.Element {
+export function SettingsTab() {
     const [accel, setAccel] = useState<string>("");
     const [error, setError] = useState<string | null>(null);
     const [maxClips, setMaxClipsState] = useState<string>("");

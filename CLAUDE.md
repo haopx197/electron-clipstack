@@ -170,7 +170,8 @@ Before the app writes the clipboard itself (during paste), `markClipboardAsCurre
 ### Window show/hide spec
 
 1. **Open** via hotkey (default `⌘⇧V`) or tray click.
-   - **Position — LOCKED**: window always appears directly under the tray icon (`tray.getBounds()`). This is a fixed spec — do not switch to cursor position or any other anchor without the user explicitly asking.
+   - **Position**: window spawns bottom-right of the current cursor with a 4px gap (`positionNearCursor` in `windowManager.ts`). If bottom-right would clip off-screen, flips to top-left of the cursor; final clamp keeps it inside `display.workArea`.
+   - After show, the user can drag the window by the top `DragHandle` strip (renderer component, `-webkit-app-region: drag`). Position is NOT persisted — every `show()` resets to cursor.
    - Uses `showInactive()` → the user's typing keeps focus/caret.
 2. **Close** — four explicit paths:
    - Click an item → paste + hide.
@@ -232,7 +233,8 @@ Image write path branches on SVG detection (`sniffUti` — first 2KB text scan f
 
 ## 6. Renderer
 
-- **`App`** — `AppShell` with `AccessibilityBanner` on top, then `TabView`.
+- **`App`** — `AppShell` with `DragHandle` (top drag strip), `AccessibilityBanner`, then `TabView`.
+- **`DragHandle`** — 22px strip with `-webkit-app-region: drag`. Lets the user reposition the frameless window. Interactive children elsewhere are outside the drag region so their clicks route normally.
 - **`TabView`** — three tabs: `Clipboard` (default), `Icons` (placeholder), `Settings`. Esc key closes settings if open, otherwise hides the window.
 - **`ClipboardTab`** — header (count / cap / `Clear All` when there are unpinned items), then list.
 - **`ClipboardItemRow`** — icon + body + hover actions (pin/unpin, delete). Body varies by type: text (3-line clamp), image (`clip-image://local/...` custom scheme, max 120px), bookmark (title + URL), file (basename + full path). Clicking anywhere except the action buttons triggers paste.

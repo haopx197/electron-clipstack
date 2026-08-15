@@ -5,3 +5,4 @@ export * from "./Flex";
 export * from "./Input";
 export * from "./Empty";
 export * from "./AccessibilityBanner";
+export * from "./DragHandle";

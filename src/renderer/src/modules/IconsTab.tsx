@@ -1,5 +1,5 @@
 import { Empty } from "../components";
 
-export function IconsTab(): React.JSX.Element {
+export function IconsTab() {
     return <Empty>Coming soon.</Empty>;
 }

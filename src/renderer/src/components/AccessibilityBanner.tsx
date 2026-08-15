@@ -5,7 +5,7 @@ import { Typography } from "./Typography";
 
 // Warning banner when Accessibility permission is missing. Non-blocking:
 // clipboard history still works, only auto-Cmd+V is disabled.
-export function AccessibilityBanner(): React.JSX.Element | null {
+export function AccessibilityBanner() {
     const [trusted, setTrusted] = useState<boolean | null>(null);
 
     useEffect(() => {

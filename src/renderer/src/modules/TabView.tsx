@@ -8,7 +8,7 @@ import { SettingsTab } from "./SettingsTab";
 
 type TabKey = "clipboard" | "icons" | "settings";
 
-export function TabView(): React.JSX.Element {
+export function TabView() {
     const [tab, setTab] = useState<TabKey>("clipboard");
 
     useEffect(() => {

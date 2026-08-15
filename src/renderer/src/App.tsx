@@ -16,7 +16,7 @@ const AppShell = styled.div`
     display: flex;
     flex-direction: column;
     height: 100%;
-    background: var(--color-bg);
+    background: var(--color-white);
 `;
 
 export default App;

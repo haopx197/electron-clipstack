@@ -48,8 +48,7 @@ function writeItems(items: ClipboardItem[]): void {
     store.set("items", items);
 }
 
-// One-time migration: legacy html/rtf items → text. Chạy lúc module load,
-// idempotent — nếu không còn item legacy thì không ghi disk.
+// One-shot migration: legacy html/rtf → text. Idempotent.
 (function migrateLegacyRichTypes(): void {
     const items = readItems();
     let dirty = false;
@@ -72,7 +71,7 @@ function sortItems(items: ClipboardItem[]): ClipboardItem[] {
     return [...pinned, ...unpinned];
 }
 
-/** Only image items own a file managed by ClipStack — file items point at user files. */
+// Only image-type items own files under clip-images/. file-type points to user file.
 function cleanupOwnedFiles(item: ClipboardItem): void {
     if (item.type === "image") {
         deleteImageFile(item.content);

@@ -22,11 +22,8 @@ export function saveImage(image: NativeImage): string {
     return filePath;
 }
 
-/**
- * Lưu bytes ảnh nguyên bản với extension cho trước. Dùng cho SVG (XML text —
- * nativeImage không parse được) và GIF (nativeImage load về static, mất animation).
- * Renderer `<img>` render mọi format browser hỗ trợ.
- */
+// Save raw bytes with original ext. Used for SVG (nativeImage can't parse XML)
+// and GIF (nativeImage loads static, drops animation).
 export function saveImageBytes(bytes: Buffer, ext: string): string {
     const dir = getImagesDir();
     const filePath = join(dir, `${uuid()}.${ext}`);
@@ -40,6 +37,6 @@ export function deleteImageFile(path: string): void {
             unlinkSync(path);
         }
     } catch {
-        // best-effort
+        // best-effort — ignore
     }
 }

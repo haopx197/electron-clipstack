@@ -1,4 +1,4 @@
-import { ChangeEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
+import { ChangeEvent, KeyboardEvent, useEffect, useState } from "react";
 import styled from "styled-components";
 
 import { Input } from "@renderer/components";
@@ -75,12 +75,10 @@ export function SettingsTab(): React.JSX.Element {
     const [accel, setAccel] = useState<string>("");
     const [error, setError] = useState<string | null>(null);
     const [maxClips, setMaxClipsState] = useState<string>("");
-    const inputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
         void window.clipstack.getHotkey().then(setAccel);
         void window.clipstack.getMaxClips().then((n) => setMaxClipsState(String(n)));
-        inputRef.current?.focus();
     }, []);
 
     const onKeyDown = async (e: KeyboardEvent<HTMLInputElement>): Promise<void> => {
@@ -117,7 +115,6 @@ export function SettingsTab(): React.JSX.Element {
     return (
         <Wrapper>
             <Input
-                ref={inputRef}
                 label="Shortcut - Press keys to change."
                 labelIcon={<IconInformationCircle />}
                 error={error}

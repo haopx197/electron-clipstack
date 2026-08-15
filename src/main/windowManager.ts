@@ -6,12 +6,9 @@ import { startMouseMonitor, stopMouseMonitor } from "./helper";
 import { getTray } from "./tray";
 
 let mainWindow: BrowserWindow | null = null;
-// Track state qua biến JS INLINE-ONLY (không register show/hide event listener →
-// không dual-write race). Lý do KHÔNG dùng `mainWindow.isVisible()`: sau
-// `showInactive()`/`hide()`, macOS Electron IPC query `[NSWindow isVisible]` có
-// thể lag/stale trong vài ms — rapid tray click thấy state cũ → toggle sai
-// (click 2 thấy visible=false → showWindow lại → window "cứ mở"). Biến JS set
-// inline ngay sau show/hide call → luôn khớp intent, rapid click toggle chuẩn.
+// Track state via JS variable only. DO NOT use `mainWindow.isVisible()`:
+// after showInactive/hide, IPC query `[NSWindow isVisible]` lags a few ms →
+// rapid tray clicks see stale state → wrong toggle.
 let visible = false;
 
 export function getMainWindow(): BrowserWindow | null {
@@ -24,7 +21,7 @@ export function createMainWindow(): BrowserWindow {
         height: DEFAULT_WINDOW_SIZE.height,
         show: false,
         frame: false,
-        // Fixed dưới tray, user không thể kéo đi chỗ khác.
+        // Fixed under tray; user can't drag elsewhere.
         movable: false,
         resizable: false,
         minimizable: false,
@@ -41,8 +38,8 @@ export function createMainWindow(): BrowserWindow {
             nodeIntegration: false,
             webviewTag: false,
             spellcheck: false,
-            // Không throttle renderer khi window hidden → paint state luôn sẵn
-            // sàng khi hiện lên, tray click on/off không phải chờ renderer wake.
+            // No throttle when hidden → paint ready on show,
+            // tray click on/off doesn't wait for renderer wake.
             backgroundThrottling: false
         }
     });
@@ -50,9 +47,8 @@ export function createMainWindow(): BrowserWindow {
     mainWindow.setAlwaysOnTop(true, "floating");
     mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
 
-    // KHÔNG đăng ký blur handler (blur race với tray.click) hoặc show/hide event
-    // handler (dual-write state race). Mọi đóng đi qua hideWindow() explicit:
-    // mouse-monitor click ngoài, tray toggle, hotkey toggle, item click, Esc.
+    // DO NOT register blur/show/hide listeners — blur races with tray.click,
+    // dual-writing state via events races. All close paths go through explicit hideWindow().
 
     if (is.dev && process.env["ELECTRON_RENDERER_URL"]) {
         mainWindow.loadURL(process.env["ELECTRON_RENDERER_URL"]);
@@ -69,16 +65,15 @@ function isPointInRect(x: number, y: number, b: Rectangle): boolean {
 
 function onGlobalClick(x: number, y: number): void {
     if (!mainWindow || !visible) return;
-    // Click trong window → giữ open (renderer tự xử lý click item để paste + hide).
     if (isPointInRect(x, y, mainWindow.getBounds())) return;
-    // Click trong menubar strip (tray, menu items, notch) → không hide, tray.click
-    // sẽ tự toggle. Dùng display của click point (multi-monitor safe).
+    // Click inside menubar strip → don't hide; tray.click handles toggle.
+    // Use display of click point (multi-monitor safe).
     const display = screen.getDisplayNearestPoint({ x, y });
     if (y < display.workArea.y) return;
     hideWindow();
 }
 
-// Luôn position dưới tray icon (spec LOCKED — CLAUDE.md).
+// Always position under tray icon (spec LOCKED — CLAUDE.md).
 function positionUnderTray(): void {
     if (!mainWindow) return;
     const tray = getTray();
@@ -92,10 +87,10 @@ export function showWindow(): void {
     if (!mainWindow || visible) return;
     visible = true;
     positionUnderTray();
-    // Chỉ unhide khi app THỰC SỰ hidden — tránh call app.show() thừa gây macOS
-    // re-activation animation. Scenario cần: sau paste (app.hide đã chạy).
+    // Only unhide when app actually hidden — avoids macOS re-activation animation.
+    // Needed after paste (app.hide already ran).
     if (app.isHidden()) app.show();
-    // showInactive: order-front, không lấy key/focus → app user đang gõ giữ nguyên caret.
+    // showInactive: order-front, don't take key/focus → user's typing keeps caret.
     mainWindow.showInactive();
     startMouseMonitor(onGlobalClick);
 }

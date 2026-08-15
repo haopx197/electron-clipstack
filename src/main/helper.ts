@@ -3,8 +3,8 @@ import { app, screen } from "electron";
 import { existsSync } from "fs";
 import { join } from "path";
 
-// Persistent Swift child process (native/ClipStackHelper.swift). Giao thức
-// text line-based qua stdin/stdout. Cần Accessibility permission.
+// Persistent Swift child (native/ClipStackHelper.swift). Line protocol over
+// stdin/stdout. Requires Accessibility permission.
 type Line = string;
 
 let child: ChildProcessWithoutNullStreams | null = null;
@@ -12,12 +12,10 @@ let stdoutBuffer = "";
 
 let mouseClickListener: ((x: number, y: number) => void) | null = null;
 let clipboardChangedListener: (() => void) | null = null;
-// Cache real POSIX paths của file URLs trên pasteboard, do helper Swift push
-// mỗi khi clipboard đổi (đọc qua NSURL nên resolve được /.file/id=<inode>).
+// POSIX paths pushed by helper via NSURL → resolves /.file/id=<inode>.
 let pasteboardFilePaths: string[] = [];
-// Cache path tới PNG temp file mà helper Swift dump từ pasteboard (đọc qua
-// NSImage, bắt được legacy OSType flavors mà Electron readImage bỏ sót — VD
-// image copy từ Chrome/Facebook chỉ có `PNGf`/`JPEG` OSType).
+// PNG temp file the helper dumps from pasteboard via NSImage — catches legacy
+// OSType flavors Electron readImage misses (e.g. Chrome/Facebook write only `PNGf`).
 let pasteboardImagePath: string | null = null;
 
 function resolveHelperPath(): string {
@@ -61,12 +59,12 @@ function handleLine(line: Line): void {
             const xEv = parseFloat(xs);
             const yEv = parseFloat(ys);
             if (!Number.isFinite(xEv) || !Number.isFinite(yEv)) return;
-            // Swift trả toạ độ NSEvent (bottom-left). Electron dùng top-left.
+            // Swift returns NSEvent coords (bottom-left). Electron uses top-left.
             const primary = screen.getPrimaryDisplay();
             mouseClickListener(xEv, primary.bounds.y + primary.bounds.height - yEv);
             return;
         }
-        // ack-only responses — ignore silently.
+        // ack-only response — ignore silently.
         case "paste":
         case "mouse-start":
         case "mouse-stop":
@@ -81,17 +79,10 @@ function handleLine(line: Line): void {
     }
 }
 
-// Real POSIX paths của mọi file đang có trên pasteboard, do helper resolve từ
-// NSURL. Rỗng nếu clipboard không có file. Cập nhật realtime mỗi lần helper
-// phát hiện clipboard đổi (push TRƯỚC clipboard-changed).
 export function getPasteboardFilePaths(): string[] {
     return pasteboardFilePaths;
 }
 
-// Path tới PNG file (trong $TMPDIR) chứa image data helper decode được từ
-// pasteboard. Null nếu clipboard không có image hoặc decode fail. Fallback cho
-// case Electron `clipboard.readImage()` empty vì Chrome/browser ghi legacy
-// OSType flavors.
 export function getPasteboardImagePath(): string | null {
     return pasteboardImagePath;
 }
@@ -106,11 +97,10 @@ export function startHelper(): void {
     child = spawn(p, [], { stdio: ["pipe", "pipe", "pipe"] });
     child.stdout.setEncoding("utf8");
     child.stderr.setEncoding("utf8");
-    // Nuốt async EPIPE để không crash Electron main khi helper đã exit (thường
-    // xảy ra lúc shutdown: SIGINT giết cả process group, helper chết trước khi
-    // stopHelper gửi "quit" → write vào broken pipe).
+    // Swallow async EPIPE so main doesn't crash after helper exit (shutdown:
+    // SIGINT kills whole process group → write into broken pipe).
     child.stdin.on("error", () => {
-        // silent — expected during shutdown
+        // silent — expected on shutdown
     });
     child.stdout.on("data", (chunk: string) => {
         stdoutBuffer += chunk;
@@ -155,9 +145,8 @@ export function stopHelper(): void {
     }
 }
 
-// Fire-and-forget Cmd+V. Helper tự track target app qua NSWorkspace
-// notification, activate + wait deterministic (isActive == true) rồi post
-// CGEvent Cmd+V.
+// Fire-and-forget Cmd+V. Helper tracks target via NSWorkspace notification,
+// activates + waits (isActive == true) then posts CGEvent Cmd+V.
 export function simulatePasteViaHelper(): void {
     write("paste");
 }
@@ -172,8 +161,8 @@ export function stopMouseMonitor(): void {
     write("mouse-stop");
 }
 
-// Native NSPasteboard.changeCount poll — chỉ notify khi count đổi. Trả true
-// nếu helper đang chạy; false → caller nên fallback setInterval bên Node.
+// Native NSPasteboard.changeCount poll — only notifies on change. False →
+// caller should fall back to Node setInterval.
 export function startClipboardWatch(cb: () => void): boolean {
     if (!child) return false;
     clipboardChangedListener = cb;

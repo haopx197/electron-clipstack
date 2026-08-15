@@ -19,11 +19,10 @@ function tryRealpath(p: string): string {
     }
 }
 
-// URL string đơn — không kèm text xung quanh. Dùng để detect "copy 1 URL" từ
-// nội dung web/chat/doc → hiển thị dưới dạng bookmark cho đẹp.
+// Standalone URL (no surrounding text) → render as bookmark.
 const URL_RE = /^https?:\/\/\S+$/i;
 
-// Strip tags → text. Dùng khi app chỉ ghi HTML mà không kèm plain-text (hiếm).
+// Fallback when app writes HTML without plain-text.
 function htmlToText(html: string): string {
     return html
         .replace(/<style[\s\S]*?<\/style>/gi, " ")
@@ -39,16 +38,9 @@ function htmlToText(html: string): string {
         .trim();
 }
 
-/**
- * Detect image format qua magic bytes / content signature.
- *
- * Kết quả gồm extension + `needsConversion`:
- *   - `false` = renderer <img> render trực tiếp được → save raw bytes.
- *   - `true`  = Chromium không render (TIFF, HEIC) → qua nativeImage → PNG.
- *
- * Dựa vào MAGIC BYTES chứ không phải extension: bắt được cả file rename sai,
- * `.file/id=<inode>` không có extension, hay clipboard image data thô.
- */
+// Detect image format via magic bytes (don't trust extension) — catches
+// renamed files and `.file/id=<inode>` without ext. needsConversion=true
+// means Chromium <img> can't render (TIFF/HEIC) → needs nativeImage → PNG.
 type SniffResult = { ext: string; needsConversion: boolean } | null;
 
 function sniffImageFormat(bytes: Buffer): SniffResult {
@@ -60,7 +52,7 @@ function sniffImageFormat(bytes: Buffer): SniffResult {
     // JPEG: FF D8 FF
     if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff)
         return { ext: "jpg", needsConversion: false };
-    // GIF87a / GIF89a — save raw để giữ animation (nativeImage chỉ load frame đầu)
+    // GIF: save raw to preserve animation (nativeImage loads only first frame).
     if (
         bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x38 &&
         (bytes[4] === 0x37 || bytes[4] === 0x39) && bytes[5] === 0x61
@@ -69,38 +61,36 @@ function sniffImageFormat(bytes: Buffer): SniffResult {
     // BMP
     if (bytes[0] === 0x42 && bytes[1] === 0x4d)
         return { ext: "bmp", needsConversion: false };
-    // WEBP: RIFF....WEBP (cần cả 2 tag để không nhầm WAV/AVI)
+    // WEBP: RIFF....WEBP (need both tags to avoid WAV/AVI collision).
     if (
         bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46 &&
         bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50
     )
         return { ext: "webp", needsConversion: false };
-    // ICO
     if (bytes[0] === 0x00 && bytes[1] === 0x00 && bytes[2] === 0x01 && bytes[3] === 0x00)
         return { ext: "ico", needsConversion: false };
-    // TIFF (browser không render → convert qua nativeImage)
+    // TIFF: browser can't render → convert via nativeImage.
     if (
         (bytes[0] === 0x49 && bytes[1] === 0x49 && bytes[2] === 0x2a && bytes[3] === 0x00) ||
         (bytes[0] === 0x4d && bytes[1] === 0x4d && bytes[2] === 0x00 && bytes[3] === 0x2a)
     )
         return { ext: "tiff", needsConversion: true };
-    // ISO-BMFF (HEIC/HEIF/AVIF): "ftyp" tại offset 4, brand tại offset 8. Lọc để tránh MP4/MOV.
+    // ISO-BMFF (HEIC/HEIF/AVIF): "ftyp" at offset 4, brand at offset 8. Filter brand to avoid MP4/MOV.
     if (bytes[4] === 0x66 && bytes[5] === 0x74 && bytes[6] === 0x79 && bytes[7] === 0x70) {
         const brand = bytes.subarray(8, 12).toString("ascii").toLowerCase();
-        if (brand === "avif") return { ext: "avif", needsConversion: false }; // Chromium 85+ render
+        if (brand === "avif") return { ext: "avif", needsConversion: false };
         if (/^(heic|heix|hevc|hevx|mif1|msf1)$/.test(brand))
             return { ext: "heic", needsConversion: true };
     }
-    // SVG: XML text. Có thể có BOM, XML decl, comments, DOCTYPE trước `<svg`.
+    // SVG may have BOM/XML decl/comments/DOCTYPE before `<svg`.
     const head = bytes.subarray(0, 2048).toString("utf8");
     if (/<svg[\s>]/i.test(head)) return { ext: "svg", needsConversion: false };
 
     return null;
 }
 
-// Fallback interval khi helper không sẵn sàng (chưa spawn, crash, chưa cấp
-// Accessibility permission). Native path dùng NSPasteboard.changeCount 100ms
-// và chỉ notify khi thực sự đổi — không cần đặt số này.
+// Fallback interval when helper unavailable. Native path uses
+// NSPasteboard.changeCount 100ms and only notifies on change — not this.
 const FALLBACK_POLL_INTERVAL_MS = 400;
 
 let lastSignature: string | null = null;
@@ -112,14 +102,9 @@ function sha1(input: string | Buffer): string {
     return createHash("sha1").update(input).digest("hex");
 }
 
-/**
- * Lấy real POSIX paths của MỌI file trên pasteboard (Finder multi-select).
- *
- * Ưu tiên cache do helper Swift push qua NSURL — bắt được cả file-reference URL
- * dạng `/.file/id=<inode>` mà POSIX `open()` từ chối. Fallback đọc `public.file-url`
- * trực tiếp bằng Electron API khi helper chưa spawn / chưa cấp Accessibility
- * (fallback CHỈ trả 1 path — Electron `readBuffer` không expose multi-URL list).
- */
+// Prefer cache pushed by Swift helper via NSURL — handles file-reference URLs
+// like `/.file/id=<inode>` that POSIX `open()` rejects. Electron readBuffer
+// fallback returns only ONE path (no multi-URL list exposed).
 function readAllFilePaths(): string[] {
     const cached = getPasteboardFilePaths();
     if (cached.length > 0) return cached;
@@ -134,13 +119,12 @@ function readAllFilePaths(): string[] {
     }
 }
 
-/** Save action for a single file path from pasteboard (image sniff or plain file). */
 function buildFileSave(rawPath: string): () => void {
     let bytes: Buffer | null = null;
     try {
         bytes = readFileSync(rawPath);
     } catch {
-        // fall through to plain file
+        // fallback: treat as plain file
     }
     if (bytes && bytes.length > 0) {
         const sniff = sniffImageFormat(bytes);
@@ -169,7 +153,6 @@ function buildFileSave(rawPath: string): () => void {
     return () => addItem({ type: "file", content: displayPath, fileName: basename(displayPath) });
 }
 
-/** Signature contribution for a single file path (image hash if image, else file path). */
 function buildFileSig(rawPath: string): string {
     let bytes: Buffer | null = null;
     try {
@@ -195,31 +178,18 @@ function readBookmarkSafe(): { title: string; url: string } | null {
         const bm = clipboard.readBookmark();
         if (bm && bm.url) return { title: bm.title || "", url: bm.url };
     } catch {
-        // some macOS versions throw when no bookmark is present
+        // some macOS versions throw when no bookmark present
     }
     return null;
 }
 
-/**
- * Đọc pasteboard hiện tại → xác định representation chính để hiển thị.
- *
- * Một copy trên macOS luôn có NHIỀU representations cùng lúc (public.file-url +
- * public.png từ Finder; public.html + public.utf8-plain-text từ browser/Slack; v.v.).
- * Không có khái niệm "type gốc" — mình phải chọn 1 để hiển thị. Quy tắc:
- *
- *   1. Có `public.file-url`               → user copy file (image ext ⇒ đọc file thật, khác ⇒ file)
- *   2. Có image data (không kèm file-url) → image data trực tiếp (screenshot, Preview, Photoshop…)
- *   3. Có `public.url-name` + bookmark    → bookmark (Safari address bar)
- *   4. Có plain-text                      → text (mọi copy text-like đều có plain-text)
- *   5. Chỉ có html (không plain-text)     → html thuần (hiếm)
- *   6. Chỉ có rtf (không plain-text)      → rtf thuần (hiếm)
- *
- * Bước 4 đứng trước 5/6 để text copy từ browser/Slack không bị mặc định thành HTML.
- *
- * Chỉ gọi `clipboard.readXXX()` khi format thực sự có mặt — tránh trigger
- * CoreText/AppKit parse paths không cần thiết (`readRTF`/`readHTML` chạm font
- * system → macOS log "CoreText note: .SFNS-Regular ..." spam mỗi call).
- */
+// Pasteboard always carries multiple representations (file-url+png, html+text…).
+// Priority: 1) file-url  2) image data  3) bookmark (url-name)  4) plain-text
+// 5) html-only  6) rtf-only. Text before html so copies from browser/Slack
+// don't default to HTML.
+//
+// Only call `clipboard.readXXX()` when format present — avoids log spam
+// "CoreText note: .SFNS-Regular ..." from readRTF/readHTML on every call.
 function captureCurrent(): { sig: string; save: () => void } | null {
     const has = (fmt: string): boolean => {
         try {
@@ -230,12 +200,8 @@ function captureCurrent(): { sig: string; save: () => void } | null {
     };
 
 
-    // 1) File copy từ Finder — kể cả khi kèm image preview, luôn ưu tiên file gốc.
-    //    Multi-select được: iterate mọi path, mỗi path sniff magic độc lập:
-    //      • Format browser render được (PNG/JPEG/GIF/BMP/WEBP/SVG/ICO/AVIF) → save raw
-    //      • Format cần convert (TIFF/HEIC) → nativeImage → PNG
-    //      • Không phải ảnh → file (giữ path, không copy nội dung)
-    //    Iterate reversed để paths[0] có createdAt cao nhất → nằm trên đầu batch.
+    // 1) File from Finder — even if image preview attached, prefer original file.
+    //    Iterate reversed so paths[0] gets highest createdAt → top of batch.
     if (has("public.file-url")) {
         const paths = readAllFilePaths();
         if (paths.length > 0) {
@@ -251,9 +217,9 @@ function captureCurrent(): { sig: string; save: () => void } | null {
         }
     }
 
-    // 2a) Helper Swift đã decode được image qua NSImage → PNG temp file. Thử
-    //     TRƯỚC Electron readImage vì cover được cả case Chrome/browser ghi
-    //     legacy OSType flavors (`PNGf`/`JPEG`/`8BPS`…) mà Electron miss.
+    // 2a) Swift helper decodes NSImage → PNG temp file. Try BEFORE Electron
+    //     readImage to cover legacy OSType flavors (`PNGf`/`JPEG`/`8BPS`…)
+    //     written by Chrome/browsers that Electron misses.
     const helperImgPath = getPasteboardImagePath();
     if (helperImgPath) {
         try {
@@ -273,9 +239,7 @@ function captureCurrent(): { sig: string; save: () => void } | null {
         }
     }
 
-    // 2b) Fallback: Electron readImage. Đủ cho app "well-behaved" (Preview,
-    //     screenshot, Photoshop…). Chỉ với ứng dụng gián tiếp / helper chưa
-    //     spawn / helper crash mới rơi vào đây.
+    // 2b) Electron readImage fallback — reached only when helper missing/crashed.
     if (has("public.tiff") || has("public.png")) {
         const image = clipboard.readImage();
         if (!image.isEmpty()) {
@@ -291,8 +255,8 @@ function captureCurrent(): { sig: string; save: () => void } | null {
         }
     }
 
-    // 3) Bookmark: chỉ khi có `public.url-name` (Safari attach kèm). `public.url`
-    //    một mình không đủ vì text URL bình thường cũng có thể có nó.
+    // 3) Bookmark: only when `public.url-name` present (Safari attaches it).
+    //    `public.url` alone isn't enough — plain text URLs can carry that UTI too.
     if (has("public.url-name")) {
         const bookmark = readBookmarkSafe();
         if (bookmark) {
@@ -313,8 +277,8 @@ function captureCurrent(): { sig: string; save: () => void } | null {
 
     const hasPlainText = has("public.utf8-plain-text") || has("public.plain-text");
 
-    // 4) Text — plain-text ưu tiên; fallback strip HTML nếu app chỉ ghi HTML (rất
-    //    hiếm — legacy email client, script custom). RTF-only skip (không parser).
+    // 4) Text — prefer plain-text; strip HTML as fallback if app only wrote HTML.
+    //    RTF-only skipped (no parser).
     let text: string | null = null;
     if (hasPlainText) {
         const t = clipboard.readText();
@@ -328,9 +292,8 @@ function captureCurrent(): { sig: string; save: () => void } | null {
     }
 
     if (text) {
-        // Auto-detect URL: text là 1 URL duy nhất → bookmark type (không title,
-        // không như bookmark-branch phía trên có `public.url-name`). Case điển hình:
-        // user copy URL từ nội dung web / chat / doc → paste ra vẫn là URL string.
+        // Text is a single URL → bookmark type (no title). Copying a URL from
+        // web/chat/doc still preserves the URL string.
         const trimmed = text.trim();
         if (URL_RE.test(trimmed)) {
             const url = trimmed;
@@ -352,13 +315,9 @@ function captureCurrent(): { sig: string; save: () => void } | null {
     return null;
 }
 
-// Timestamp cho tới thời điểm nào mọi capture bị coi là "OUR write" và bỏ qua.
-// Set bởi markClipboardAsCurrent(): sau khi app tự ghi clipboard (paste-item),
-// helper Swift còn poll delay + waitForPasteboardReady tối đa 700ms mới thấy
-// state mới. Trong window đó mọi capture đều là ghi của mình → chỉ update
-// baseline sig, không add. Time-based (không "consume 1 event") vì Electron
-// `writeText+writeBuffer` (case file paste) có thể fire 2 changeCount bumps,
-// và helper multi-phase wait cũng cần covered.
+// Deadline until which any capture is treated as "OUR write" and skipped.
+// Time-based (not consume-once) because writeText+writeBuffer can fire two
+// changeCount bumps, and helper multi-phase wait must be covered.
 let suppressUntilMs = 0;
 
 function poll(): void {
@@ -376,19 +335,17 @@ function poll(): void {
 
 export function startClipboardWatcher(cb: () => void): void {
     onUpdate = cb;
-    // Seed lastSignature to the current clipboard so we don't re-capture what's already there.
+    // Seed lastSignature with current pasteboard so pre-existing content isn't re-captured.
     const cap = captureCurrent();
     lastSignature = cap?.sig ?? null;
 
     stopClipboardWatcher();
 
-    // Ưu tiên native NSPasteboard.changeCount watch qua helper (poll 100ms trong
-    // background thread, chỉ notify khi count đổi → 0 work bên Node lúc idle).
+    // Prefer native changeCount watch via helper (100ms background thread).
     usingHelper = startClipboardWatch(poll);
     if (usingHelper) return;
 
-    // Fallback JS setInterval nếu helper chưa sẵn sàng (chưa spawn / crash /
-    // chưa cấp Accessibility). Giữ chức năng nhưng có overhead + log noise.
+    // Fallback setInterval when helper unavailable — overhead + log noise.
     fallbackTimer = setInterval(poll, FALLBACK_POLL_INTERVAL_MS);
 }
 
@@ -403,19 +360,10 @@ export function stopClipboardWatcher(): void {
     }
 }
 
-/**
- * After the app itself writes to the clipboard (paste-item), call this to prevent the
- * watcher from re-capturing that write as a "new" copy from the user.
- *
- * KHÔNG chỉ set lastSignature sync — helper Swift còn poll delay + wait phase 2
- * mới thấy state mới, và với image thì bytes helper decode (NSImage→PNG) khác
- * bytes gốc của item → sig sẽ mismatch. Thay vào đó suppress mọi capture
- * trong 800ms để đảm bảo tất cả clipboard-changed từ chính write của mình bị
- * dập, chỉ update baseline sig.
- *
- * Trade-off: user copy lại trong 800ms sau khi paste → miss detect. Chấp nhận
- * được — user thường thao tác chậm hơn.
- */
+// Call after app writes clipboard itself (paste-item) so watcher doesn't re-capture.
+// Can't set lastSignature synchronously — Swift helper has poll delay, and for
+// images helper-decoded bytes (NSImage→PNG) differ from originals → sig mismatch.
+// Blanket 800ms suppression. Trade-off: user re-copy within 800ms after paste is missed.
 export function markClipboardAsCurrent(): void {
     suppressUntilMs = Date.now() + 800;
 }

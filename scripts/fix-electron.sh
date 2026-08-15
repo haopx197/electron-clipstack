@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Workaround: node's `extract-zip` (dùng bởi electron npm package) bị hang khi
-# extract electron zip trên một số Node version → node_modules/electron/dist/
-# chỉ có LICENSES.chromium.html, thiếu Electron.app. Chạy lại `yarn install`
-# cũng không fix. Ta dùng `ditto` (macOS native) extract từ cache zip.
+# Workaround: node's `extract-zip` (used by electron npm package) hangs when
+# extracting the electron zip on some Node versions → node_modules/electron/dist/
+# ends up with only LICENSES.chromium.html and no Electron.app. Re-running
+# `yarn install` doesn't fix it. Use `ditto` (macOS native) to extract from cache zip.
 #
-# Detect: nếu path.txt tồn tại và Electron.app có → skip.
-# Fix: extract từ ~/Library/Caches/electron/*/electron-v<ver>-darwin-<arch>.zip
+# Detect: skip if path.txt exists and Electron.app is present.
+# Fix: extract from ~/Library/Caches/electron/*/electron-v<ver>-darwin-<arch>.zip
 
 set -euo pipefail
 

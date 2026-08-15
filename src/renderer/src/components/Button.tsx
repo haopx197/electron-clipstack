@@ -41,7 +41,7 @@ const variantStyles = {
     icon: css`
         background-color: transparent;
         color: #000;
-        width: 32px;
+        width: 28px;
 
         &:hover {
             background-color: #ebeef1;
@@ -55,8 +55,8 @@ const StyledButton = styled.button<{ $variant: Variant; $danger: boolean }>`
     gap: 8px;
     align-items: center;
     justify-content: center;
-    height: 32px;
-    border-radius: 32px;
+    height: 28px;
+    border-radius: 28px;
     border: none;
     font-size: 12px;
     cursor: pointer;
@@ -70,7 +70,8 @@ const StyledButton = styled.button<{ $variant: Variant; $danger: boolean }>`
     ${(p) =>
         p.$danger &&
         css`
-            background-color: color-mix(in srgb, var(--color-error) 20%, transparent);
-            color: var(--color-error);
+            background-color: var(--color-error);
+            color: var(--color-white);
+            border-radius: 8px;
         `}
 `;

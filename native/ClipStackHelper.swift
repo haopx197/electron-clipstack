@@ -1,56 +1,55 @@
 // ClipStackHelper — persistent Swift child process for ClipStack (Electron).
-// Line-based text protocol qua stdin/stdout. Cần Accessibility permission.
+// Line-based text protocol over stdin/stdout. Requires Accessibility permission.
 //
 // Commands (stdin) → responses (stdout):
-//   mouse-start        → mouse-start:ok       (+ click:<x>,<y> mỗi click bên ngoài)
+//   mouse-start        → mouse-start:ok       (+ click:<x>,<y> per outside click)
 //   mouse-stop         → mouse-stop:ok
 //   pb-watch-start     → pb-watch-start:ok    (+ pb-files:<paths> + clipboard-changed:<n>)
 //   pb-watch-stop      → pb-watch-stop:ok
 //   paste              → paste:ok             (activate last non-self target, CGEvent Cmd+V)
 //   quit               → exit(0)
 //
-// Events pushed khi pasteboard đổi:
-//   pb-files:<path1>\t<path2>\t…   → real POSIX paths (resolved từ NSURL — bắt được
-//                                      file-reference URL /.file/id=<inode> mà POSIX
-//                                      open() từ chối). Empty payload nếu không có file.
-//   pb-image:<path>                → PNG bytes decoded từ pasteboard (đọc qua NSImage,
-//                                      bắt cả legacy OSType flavors mà Chrome/browser
-//                                      ghi mà Electron/pbpaste không nhìn thấy được).
-//                                      Empty payload nếu không có image data.
-//   clipboard-changed:<n>          → change count mới (báo Node re-capture).
-// pb-files + pb-image LUÔN đứng TRƯỚC clipboard-changed để Node có cache sẵn khi capture.
+// Events pushed on pasteboard change:
+//   pb-files:<path1>\t<path2>\t…   → real POSIX paths (resolved from NSURL — handles
+//                                      file-reference URLs /.file/id=<inode> that POSIX
+//                                      open() rejects). Empty payload if no files.
+//   pb-image:<path>                → PNG bytes decoded from pasteboard (via NSImage,
+//                                      catches legacy OSType flavors Chrome/browsers
+//                                      write that Electron/pbpaste don't see).
+//                                      Empty payload if no image data.
+//   clipboard-changed:<n>          → new changeCount (signals Node to re-capture).
+// pb-files + pb-image ALWAYS precede clipboard-changed so Node has cache ready on capture.
 //
-// Target app để paste được track TỰ ĐỘNG qua NSWorkspace.didActivateApplication
-// notification — không cần Node gửi capture command (tránh timing race). App
-// cuối cùng active TRƯỚC ClipStack luôn được nhớ.
+// Paste target app is tracked automatically via NSWorkspace.didActivateApplication —
+// no capture command from Node (avoids timing races). Always remembers the last
+// app that was active BEFORE ClipStack.
 //
-// Mouse toạ độ: NSEvent (bottom-left). Node convert sang top-left.
+// Mouse coords: NSEvent (bottom-left). Node converts to top-left.
 
 import Foundation
 import AppKit
 import ApplicationServices
 import CoreGraphics
 
-// NSApp phải được init (accessory policy) để NSEvent global monitor callback
-// nhận events. CLI tool mặc định không có NSApp, callback silent fail dù đã
-// cấp Accessibility.
+// NSApp must be initialised (accessory policy) for NSEvent global monitor
+// callbacks to fire. Plain CLI tools have no NSApp → callback silent-fails
+// even with Accessibility granted.
 let app = NSApplication.shared
 app.setActivationPolicy(.accessory)
 
 var globalMouseMonitor: Any? = nil
 var clipboardWatchTimer: DispatchSourceTimer? = nil
 var lastChangeCount: Int = NSPasteboard.general.changeCount
-// App target để paste vào — được cập nhật liên tục qua NSWorkspace notification.
-// Luôn là app cuối cùng active mà KHÔNG phải ClipStack (parent Electron).
+// Paste target — kept in sync via NSWorkspace notifications. Always the last
+// app that became active EXCEPT ClipStack (parent Electron).
 var lastNonSelfTargetPid: pid_t = 0
 
-// Init: snapshot frontmost hiện tại nếu không phải chính mình.
+// Init: snapshot current frontmost if not self.
 if let front = NSWorkspace.shared.frontmostApplication, front.processIdentifier != getppid() {
     lastNonSelfTargetPid = front.processIdentifier
 }
 
-// Subscribe app-activation events. Callback fire mỗi khi có app khác active,
-// track PID nếu không phải parent.
+// Track every foreign app activation. Ignore parent.
 NSWorkspace.shared.notificationCenter.addObserver(
     forName: NSWorkspace.didActivateApplicationNotification,
     object: nil,
@@ -97,13 +96,13 @@ func stopMouseMonitor() {
 }
 
 // ---- Clipboard change watch ------------------------------------------------
-// macOS không có notification cho clipboard changes; NSPasteboard.changeCount
-// là cách duy nhất (mọi clipboard manager native đều poll). Read changeCount
-// cực rẻ (~1µs), không đụng CoreText path như Electron readHTML/readRTF.
+// macOS has no clipboard-change notification; NSPasteboard.changeCount is the
+// only signal (every native clipboard manager polls it). Reading changeCount
+// is ~1µs and skips the CoreText path Electron readHTML/readRTF triggers.
 
-// Đọc file URLs trên pasteboard qua NSURL (auto-resolve file-reference URL
-// dạng /.file/id=<inode> về POSIX path thật). Emit tab-separated. Luôn emit
-// kể cả khi rỗng để Node clear cache stale từ copy trước.
+// File URLs from pasteboard via NSURL (auto-resolves file-reference URLs like
+// /.file/id=<inode> to real POSIX paths). Emit tab-separated. Always emit —
+// even empty — so Node clears stale cache from previous copy.
 func emitPasteboardFiles() {
     let opts: [NSPasteboard.ReadingOptionKey: Any] = [.urlReadingFileURLsOnly: true]
     let objs = NSPasteboard.general.readObjects(forClasses: [NSURL.self], options: opts) ?? []
@@ -111,29 +110,28 @@ func emitPasteboardFiles() {
     send("pb-files:" + paths.joined(separator: "\t"))
 }
 
-// Đọc image trên pasteboard, dump PNG ra temp file, emit path.
+// Read image from pasteboard, dump PNG to temp file, emit path.
 //
-// Vì sao cần: Chrome (và nhiều app rich-content khác) ghi image bằng NSPasteboard
-// dùng "legacy OSType flavors" (`PNGf`/`8BPS`/`JPEG`/`GIF`…) chứ không declare UTI
-// (`public.png`/`public.tiff`). Result:
-//   • `pbpaste -Prefer public.tiff` trả 0 bytes
-//   • Electron `clipboard.readImage()` trả empty
-//   • Nhưng Preview.app paste vào ra ảnh — vì NSImage(pasteboard:) hiểu OSType.
-// → helper đọc qua NSImage, convert sang PNG rồi ship cho Node.
+// Why: Chrome (and many rich-content apps) write images to NSPasteboard using
+// "legacy OSType flavors" (`PNGf`/`8BPS`/`JPEG`/`GIF`…) instead of declaring
+// UTIs (`public.png`/`public.tiff`). Result:
+//   • `pbpaste -Prefer public.tiff` returns 0 bytes
+//   • Electron `clipboard.readImage()` returns empty
+//   • Preview.app paste still works — because NSImage(pasteboard:) understands OSType.
+// → Helper reads via NSImage, re-encodes as PNG, ships path to Node.
 //
-// Cleanup: xoá temp file của lần trước mỗi khi ghi mới. Không cleanup exhaustive
-// khi quit — NSTemporaryDirectory được OS auto-purge.
+// Cleanup: delete previous temp file whenever we write a new one. No exhaustive
+// quit-time cleanup — NSTemporaryDirectory is auto-purged by the OS.
 var currentTempImagePath: String? = nil
 
 func emitPasteboardImage() {
-    // Cleanup lần trước (best-effort).
     if let prev = currentTempImagePath {
         try? FileManager.default.removeItem(atPath: prev)
         currentTempImagePath = nil
     }
     let pb = NSPasteboard.general
     var pngData: Data? = nil
-    // Ưu tiên PNG bytes raw nếu có (khỏi re-encode).
+    // Prefer raw PNG bytes when available (skip re-encode).
     if let png = pb.data(forType: .png) {
         pngData = png
     } else if let objs = pb.readObjects(forClasses: [NSImage.self], options: nil) as? [NSImage],
@@ -156,18 +154,18 @@ func emitPasteboardImage() {
     }
 }
 
-// Chrome/browser (đặc biệt copy từ Facebook) có pattern MULTI-PHASE:
-//   • bump `changeCount` (clearContents ngầm)
-//   • declareTypes lần 1 → chỉ có text/html
-//   • declareTypes lần 2 (100–200ms sau) → thêm public.png/public.tiff
-// Mỗi declareTypes có thể bump changeCount → nếu Node capture ngay lần 1 sẽ
-// add text item; lần 2 add image item → user thấy 2 items cho 1 copy.
+// Chrome/browser copies (especially from Facebook) use a MULTI-PHASE pattern:
+//   • bump `changeCount` (implicit clearContents)
+//   • declareTypes pass 1 → text/html only
+//   • declareTypes pass 2 (100–200ms later) → adds public.png/public.tiff
+// Each declareTypes can bump changeCount → if Node captures on pass 1 it adds
+// a text item; pass 2 adds an image item → user sees 2 items for one copy.
 //
 // Wait strategy:
-//   1. Chờ types non-empty (max 500ms). Non-browser xong ở đây.
-//   2. Nếu detect browser (org.chromium.* type) và chưa có image types, chờ
-//      thêm max 200ms cho image phase. Nếu image xuất hiện → gộp 1 emit.
-//      Nếu hết 200ms vẫn text-only → là text copy thật, emit thôi.
+//   1. Wait for types to become non-empty (max 500ms). Non-browsers finish here.
+//   2. If browser detected (org.chromium.* type) but no image types yet, wait
+//      up to 200ms more for the image phase. Image arrives → coalesce into one
+//      emit. 200ms elapses text-only → it's a real text copy; just emit.
 private let browserPrefixes = ["org.chromium.", "com.apple.WebKit.", "com.microsoft.Edge."]
 private let imageUtis = ["public.png", "public.tiff", "public.jpeg", "public.image"]
 
@@ -197,7 +195,7 @@ func waitForPasteboardReady(phase1Ms: Int = 500, phase2Ms: Int = 200, pollMs: In
 
 func startClipboardWatch(intervalMs: Int = 100) {
     if clipboardWatchTimer != nil { return }
-    // Emit trạng thái hiện tại ngay để Node có cache khi startup.
+    // Emit current state immediately so Node has cache at startup.
     emitPasteboardFiles()
     emitPasteboardImage()
     let q = DispatchQueue(label: "clipstack.helper.pbwatch", qos: .utility)
@@ -208,14 +206,15 @@ func startClipboardWatch(intervalMs: Int = 100) {
     t.setEventHandler {
         let cur = NSPasteboard.general.changeCount
         if cur != lastChangeCount {
-            // Chờ Chrome/FB finish multi-phase write (no-op nếu types đã sẵn
-            // và không phải browser).
+            // Wait for Chrome/FB to finish multi-phase write (no-op when types
+            // are already set or the source is not a browser).
             waitForPasteboardReady()
-            // Update lastChangeCount về giá trị SAU wait — Chrome có thể bump
-            // thêm khi declareTypes phase 2 → tránh re-fire ở tick kế.
+            // Update lastChangeCount to the value AFTER the wait — Chrome may
+            // bump it further in declareTypes phase 2 → avoid re-firing next tick.
             let after = NSPasteboard.general.changeCount
             lastChangeCount = after
-            // pb-files + pb-image TRƯỚC clipboard-changed — Node cần cache sẵn khi capture.
+            // pb-files + pb-image BEFORE clipboard-changed — Node needs cache
+            // in place when it captures.
             emitPasteboardFiles()
             emitPasteboardImage()
             send("clipboard-changed:\(after)")
@@ -232,9 +231,9 @@ func stopClipboardWatch() {
 
 // ---- Paste (CGEvent Cmd+V) -------------------------------------------------
 
-// Activate target app + chờ đến khi nó thực sự active (isActive == true, đảm
-// bảo key window đã set + sẵn sàng nhận keystroke). Deterministic: poll 2ms
-// hardstop 300ms. Không cần "grace" arbitrary sau đó.
+// Activate target app + wait until it's actually active (isActive == true, key
+// window set + ready to receive keystrokes). Deterministic: poll 2ms, hard
+// stop 300ms. No arbitrary grace sleep afterwards.
 func restoreTargetAndWait(timeoutSec: TimeInterval = 0.3) {
     if lastNonSelfTargetPid == 0 { return }
     guard let target = NSRunningApplication(processIdentifier: lastNonSelfTargetPid) else { return }
@@ -246,8 +245,9 @@ func restoreTargetAndWait(timeoutSec: TimeInterval = 0.3) {
     }
 }
 
-// Post rõ ràng Cmd-down / V-down / V-up / Cmd-up. Chỉ set .maskCommand trên V
-// không robust — nhiều app (Chromium/Electron) verify physical modifier sequence.
+// Post Cmd-down / V-down / V-up / Cmd-up explicitly. Setting .maskCommand on V
+// alone is not robust — several apps (Chromium/Electron) verify the physical
+// modifier key-down/key-up sequence.
 func simulatePasteCmdV() {
     let src = CGEventSource(stateID: .combinedSessionState)
     let cmdKey: CGKeyCode = 55
@@ -270,13 +270,13 @@ func simulatePasteCmdV() {
 
 logErr("accessibility trusted: \(AXIsProcessTrusted())")
 
-// Watch parent process — nếu parent (Electron) chết vì bất kỳ lý do gì
-// (bao gồm SIGKILL), helper tự exit để không thành zombie orphan.
+// Watch parent process — if the parent (Electron) dies for any reason
+// (including SIGKILL), the helper exits so we don't turn into a zombie orphan.
 let initialParentPid = getppid()
 DispatchQueue.global(qos: .background).async {
     while true {
         sleep(2)
-        // getppid() trả 1 (launchd) khi parent gốc đã chết → orphaned.
+        // getppid() returns 1 (launchd) when the original parent is gone → orphaned.
         if getppid() != initialParentPid {
             exit(0)
         }
@@ -301,9 +301,9 @@ stdinQueue.async {
                 stopClipboardWatch()
                 send("pb-watch-stop:ok")
             case "paste":
-                // BG queue để không block main; wait + CGEvent thread-safe.
-                // restoreTargetAndWait chờ isActive == true → deterministic,
-                // không cần grace sleep sau đó.
+                // BG queue so we don't block main; wait + CGEvent are thread-safe.
+                // restoreTargetAndWait waits for isActive == true → deterministic,
+                // no arbitrary grace sleep needed.
                 DispatchQueue.global(qos: .userInitiated).async {
                     restoreTargetAndWait()
                     simulatePasteCmdV()
@@ -319,5 +319,5 @@ stdinQueue.async {
     DispatchQueue.main.async { exit(0) }
 }
 
-// NSApp.run() — spin đúng AppKit event loop để NSEvent global monitor deliver.
+// NSApp.run() — spin the real AppKit event loop so NSEvent global monitor delivers.
 app.run()

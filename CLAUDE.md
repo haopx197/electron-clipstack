@@ -1,20 +1,23 @@
-# ClipStack — Plan
+# ClipStack — Engineering Notes
 
-Clipboard history manager cho macOS, lấy cảm hứng từ Windows 11 Clipboard History (`Win+V`), build bằng Electron + TypeScript + React.
+Clipboard history manager for macOS, inspired by the Windows 11 Clipboard History (`Win+V`). Electron + TypeScript + React shell, backed by a persistent Swift helper for native pasteboard and paste simulation.
+
+Codebase language: source and comments are English. Docs are English.
 
 ## 1. Tech stack
 
-| Layer            | Chọn                                    | Lý do                                                        |
-| ---------------- | --------------------------------------- | ------------------------------------------------------------ |
-| Shell            | Electron                                | theo yêu cầu                                                 |
-| Ngôn ngữ         | TypeScript                              | an toàn type, dễ maintain                                    |
-| Bundler/scaffold | `electron-vite`                         | chuẩn hiện tại cho main/preload/renderer, HMR nhanh          |
-| UI               | React                                   | quen thuộc, đủ nhẹ cho 1 popover nhỏ                         |
-| Storage          | `electron-store` (JSON)                 | dữ liệu nhỏ (≤200 item), không cần search → không cần SQLite |
-| Đóng gói         | `electron-builder` → target `dmg`       | không lên App Store, không cần sign/notarize                 |
-| Paste tự động    | `osascript` (AppleScript System Events) | dùng chung với việc query vị trí caret focused element       |
+| Layer            | Choice                                 | Reason                                                         |
+| ---------------- | -------------------------------------- | -------------------------------------------------------------- |
+| Shell            | Electron 39                            | Given requirement                                              |
+| Language         | TypeScript                             | Type safety, easy maintenance                                  |
+| Bundler          | `electron-vite` 5                      | Standard main/preload/renderer split, fast HMR                 |
+| UI               | React 19 + styled-components           | Familiar, light enough for a small popover                     |
+| Storage          | `electron-store` (JSON)                | Dataset ≤200 items, no search → SQLite not needed              |
+| Packaging        | `electron-builder` 26 → `dmg`          | No App Store, no sign/notarize                                 |
+| Auto paste       | `CGEvent` from Swift helper            | Same permission (Accessibility) shared with AX focus queries   |
+| Native helpers   | Swift child process (`native/`)        | AX focus query, global mouse hook, NSPasteboard poll, CGEvent  |
 
-## 2. Cấu trúc project
+## 2. Project layout
 
 ```
 clipstack/
@@ -23,227 +26,245 @@ clipstack/
 ├── electron-builder.yml
 ├── tsconfig.json / tsconfig.node.json / tsconfig.web.json
 ├── native/
-│   └── ClipStackHelper.swift      # Swift child process: AX focus query + global mouse monitor
+│   └── ClipStackHelper.swift      # Swift child: AX focus, mouse monitor, pb watch, paste
 ├── resources/
-│   ├── trayIconTemplate.png       # icon tray 16x16 (do bạn cung cấp)
-│   ├── trayIconTemplate@2x.png    # 32x32 cho Retina
-│   └── ClipStackHelper            # binary compile từ native/ClipStackHelper.swift (build:helper)
+│   ├── trayIconTemplate.png       # 16×16 template icon (auto-tinted)
+│   ├── trayIconTemplate@2x.png    # 32×32 retina
+│   └── ClipStackHelper            # binary from build:helper:universal (arm64+x64 lipo)
+├── build/
+│   ├── icon.icns / icon.png / icon.ico
+│   └── entitlements.mac.plist     # JIT + unsigned-executable-memory + dyld-env-vars
+├── scripts/
+│   ├── install.sh                 # curl | bash installer (strips quarantine)
+│   └── fix-electron.sh            # postinstall workaround for extract-zip hang
 ├── src/
 │   ├── shared/
 │   │   ├── types.ts                # ClipboardItem, AppSettings, constants
-│   │   └── ipc.ts                  # tên channel IPC dùng chung main/preload
+│   │   └── ipc.ts                  # channel names shared main/preload
 │   ├── main/
-│   │   ├── index.ts                # entry: app lifecycle, wiring mọi module
-│   │   ├── store.ts                # đọc/ghi electron-store (items + settings)
-│   │   ├── images.ts               # lưu/xoá file ảnh trong userData/clip-images
-│   │   ├── clipboardWatcher.ts      # poll clipboard, phát hiện thay đổi
-│   │   ├── paste.ts                 # simulate Cmd+V qua osascript
-│   │   ├── helper.ts                # spawn+IPC với ClipStackHelper (AX query + mouse hook)
-│   │   ├── windowManager.ts         # tạo/show/hide/resize window
-│   │   ├── tray.ts                  # tray icon + click handler
-│   │   ├── hotkey.ts                # đăng ký/đổi global shortcut
-│   │   └── ipcHandlers.ts           # nối IPC channel → các hàm store/window/paste
+│   │   ├── index.ts                # entry, wiring, single-instance lock
+│   │   ├── store.ts                # electron-store: items + settings
+│   │   ├── images.ts               # save/delete PNG in userData/clip-images
+│   │   ├── clipboardWatcher.ts     # capture flow, format sniff, dedup
+│   │   ├── helper.ts               # Swift helper IPC (line protocol over stdio)
+│   │   ├── windowManager.ts        # single BrowserWindow, showInactive, position under tray
+│   │   ├── tray.ts                 # tray icon + context menu
+│   │   ├── hotkey.ts               # global shortcut register + change with rollback
+│   │   ├── screencapture.ts        # sets Cmd+Shift+3/4/5 target = clipboard
+│   │   └── ipcHandlers.ts          # ipcMain handlers + broadcast
 │   ├── preload/
-│   │   ├── index.ts                 # contextBridge, expose window.clipstack
-│   │   └── index.d.ts               # type cho window.clipstack ở renderer
+│   │   ├── index.ts                # contextBridge, exposes window.clipstack API
+│   │   └── index.d.ts              # renderer-side type for window.clipstack
 │   └── renderer/
 │       ├── index.html
 │       └── src/
 │           ├── main.tsx
-│           ├── App.tsx
-│           ├── styles.css
-│           ├── types.ts
-│           └── components/
-│               ├── TopBar.tsx        # nút reset size + nút settings
-│               ├── Tabs.tsx          # tab Clipboard / Icons
-│               ├── ClipboardTab.tsx  # Clear All + list
-│               ├── ClipboardItemRow.tsx
-│               ├── IconsTab.tsx      # placeholder, để trống
-│               └── SettingsPanel.tsx # đổi hotkey
+│           ├── App.tsx             # AccessibilityBanner + TabView
+│           ├── globalStyles.ts
+│           ├── components/         # Button, Input, Empty, Typography, AccessibilityBanner…
+│           ├── modules/            # TabView, ClipboardTab, ClipboardItemRow, IconsTab, SettingsTab
+│           └── SVGs/               # icon components
 ```
 
 ## 3. Data model (`src/shared/types.ts`)
 
 ```ts
+type ClipboardItemType = "text" | "image" | "bookmark" | "file";
+
 type ClipboardItem = {
     id: string;
-    type: "text" | "image";
-    content: string; // text: nội dung thô; image: path file PNG trong userData/clip-images
+    type: ClipboardItemType;
+    /**
+     * Primary payload:
+     *   text     — raw text
+     *   image    — absolute path in userData/clip-images
+     *   bookmark — URL
+     *   file     — absolute path to user-owned file (not managed by ClipStack)
+     */
+    content: string;
+    preview?: string;         // plain-text preview for bookmark
+    bookmarkTitle?: string;
+    fileName?: string;        // cached basename for type "file"
     pinned: boolean;
-    createdAt: number; // dùng để sort trong nhóm unpinned
+    createdAt: number;        // for sorting within the unpinned group
 };
 
 type AppSettings = {
-    hotkey: string; // accelerator string, mặc định 'Command+Shift+V'
+    hotkey: string;           // Electron accelerator string
+    maxClips: number;         // clamped to [MIN_MAX_CLIPS, MAX_MAX_CLIPS]
 };
 
 const DEFAULT_HOTKEY = "Command+Shift+V";
 const DEFAULT_WINDOW_SIZE = { width: 400, height: 500 };
-const MAX_UNPINNED_ITEMS = 200;
+const DEFAULT_MAX_CLIPS = 50;
+const MIN_MAX_CLIPS = 1;
+const MAX_MAX_CLIPS = 200;
 ```
 
-**Quy tắc thứ tự hiển thị** (áp dụng ở mọi nơi trả list ra renderer):
-`[...pinned items] + [...unpinned items, mới nhất trước]`
-→ item vừa copy luôn nằm ngay dưới nhóm pinned, không chen giữa các item đã ghim.
+**Display order** — everywhere a list is returned to the renderer:
+`[...pinned items] + [...unpinned items, newest first]`
+→ a fresh copy always sits right under the pinned group, never inserted between pinned items.
 
 ## 4. IPC contract (`src/shared/ipc.ts`)
 
-| Channel                   | Hướng                        | Payload → Trả về                                                             |
-| ------------------------- | ---------------------------- | ---------------------------------------------------------------------------- |
-| `clipboard:get-items`     | renderer → main (invoke)     | `()` → `ClipboardItem[]` (đã group pinned trước)                             |
-| `clipboard:paste-item`    | renderer → main (invoke)     | `(id)` → ghi clipboard + ẩn window + simulate paste                          |
-| `clipboard:pin-item`      | renderer → main (invoke)     | `(id)` → toggle pinned → `ClipboardItem[]` mới                               |
-| `clipboard:delete-item`   | renderer → main (invoke)     | `(id)` → xoá item (+ file ảnh nếu có) → `ClipboardItem[]` mới                |
-| `clipboard:clear-all`     | renderer → main (invoke)     | `()` → chỉ xoá item chưa ghim (+ file ảnh liên quan) → `ClipboardItem[]` mới |
-| `clipboard:items-updated` | main → renderer (push event) | bắn mỗi khi watcher phát hiện item mới                                       |
-| `settings:get-hotkey`     | renderer → main (invoke)     | `()` → `string`                                                              |
-| `settings:set-hotkey`     | renderer → main (invoke)     | `(accelerator)` → `{ ok: boolean; error?: string }`                          |
-| `window:reset-size`       | renderer → main (invoke)     | `()` → resize về 400×500, giữ nguyên góc trên-trái                           |
-| `window:hide`             | renderer → main (invoke)     | `()` → ẩn window (dùng khi nhấn `Esc`)                                       |
+| Channel                                  | Direction                    | Payload → Return                                                       |
+| ---------------------------------------- | ---------------------------- | ---------------------------------------------------------------------- |
+| `clipboard:get-items`                    | renderer → main (invoke)     | `()` → `ClipboardItem[]` (pinned first)                                |
+| `clipboard:paste-item`                   | renderer → main (invoke)     | `(id)` → write clipboard + hide window + simulate paste                |
+| `clipboard:pin-item`                     | renderer → main (invoke)     | `(id)` → toggle pinned → new `ClipboardItem[]`                         |
+| `clipboard:delete-item`                  | renderer → main (invoke)     | `(id)` → delete item (+ PNG file if image) → new `ClipboardItem[]`     |
+| `clipboard:clear-all`                    | renderer → main (invoke)     | `()` → delete unpinned only (+ their PNGs) → new `ClipboardItem[]`     |
+| `clipboard:items-updated`                | main → renderer (push)       | fires whenever the watcher captures a new item                         |
+| `settings:get-hotkey`                    | renderer → main (invoke)     | `()` → `string`                                                        |
+| `settings:set-hotkey`                    | renderer → main (invoke)     | `(accelerator)` → `{ ok: boolean; error?: string }`                    |
+| `settings:get-max-clips`                 | renderer → main (invoke)     | `()` → `number`                                                        |
+| `settings:set-max-clips`                 | renderer → main (invoke)     | `(n)` → `{ maxClips, items }` (trims to cap, deletes dropped PNGs)     |
+| `window:hide`                            | renderer → main (invoke)     | `()` → hide window (used by Esc key)                                   |
+| `system:accessibility-status`            | renderer → main (invoke)     | `()` → `boolean` (check-only, no native prompt)                        |
+| `system:open-accessibility-settings`     | renderer → main (invoke)     | `()` → opens System Settings → Privacy & Security → Accessibility      |
+| `system:relaunch`                        | renderer → main (invoke)     | `()` → `app.relaunch()` + `exit(0)` (no-op in dev)                     |
 
-## 5. Main process — hành vi từng module
+## 5. Main process — module behaviour
 
-**`clipboardWatcher.ts`**
+### `clipboardWatcher.ts`
 
-- macOS không có notification "clipboard changed" ở tầng OS; mọi clipboard manager (kể cả native) đều dựa vào `NSPasteboard.changeCount`. ClipStack watch bằng cách:
-    - **Primary**: helper Swift poll `NSPasteboard.general.changeCount` 100ms trong DispatchSource background queue, chỉ notify Node khi count đổi → 0 CPU + 0 log noise lúc idle.
-    - **Fallback**: nếu helper unavailable (chưa spawn / crash / chưa cấp Accessibility), rơi về JS `setInterval(poll, 400ms)`.
-- Khi có tín hiệu "clipboard đã đổi", `captureCurrent()` chạy dò format qua `clipboard.has(<UTI>)` trước khi call reader (không call `readHTML`/`readRTF` khi không cần → tránh CoreText font resolution + macOS log spam).
-- Text: so sánh string trực tiếp (rẻ).
-- Ảnh: so sánh bằng **hash** (`crypto.createHash('sha1')` trên buffer PNG từ `image.toPNG()`), **không** dùng `image.toDataURL()` để so sánh (base64 hoá tốn CPU nếu ảnh to và nằm lâu trên clipboard).
-- Copy trùng nội dung đã có trong list → chỉ bump timestamp + đưa lên đầu nhóm unpinned, không tạo item trùng.
-- Trước khi app tự ghi clipboard (lúc paste), phải "seed" lại giá trị `lastSignature` để watcher không hiểu nhầm đó là một copy mới của user.
+macOS has no OS-level clipboard-change notification; every clipboard manager (native or not) polls `NSPasteboard.changeCount`. ClipStack does this via the Swift helper:
 
-**`store.ts`**
+- **Primary**: helper's DispatchSource background timer at 100ms, only notifies Node when `changeCount` changes → ~0 CPU + no log spam.
+- **Fallback**: if the helper is unavailable (missing binary / crashed / Accessibility denied), Node polls with `setInterval(poll, 400ms)`.
 
-- `addItem`, `pinItem`, `deleteItem`, `clearAll`, `getItems` (luôn trả về theo thứ tự pinned-first).
-- `MAX_UNPINNED_ITEMS = 200`: khi thêm item mới vượt cap, các item unpinned cũ nhất bị đẩy ra phải được xoá — **và nếu item bị đẩy ra là ảnh, phải gọi `images.deleteImageFile()` xoá file PNG tương ứng** (tránh rác tích tụ trong `clip-images/`).
-- `deleteItem` / `clearAll`: cùng nguyên tắc — xoá item ảnh phải xoá kèm file.
-- `clearAll`: chỉ xoá item **chưa ghim**, giữ nguyên toàn bộ pinned.
+Capture pipeline (`captureCurrent`), priority order:
+1. **File URL** — `public.file-url` present. Uses helper's `pb-files` (NSURL-resolved POSIX paths, handles `/.file/id=<inode>`). If the file is an image and format is renderable by Chromium `<img>`, save as image; TIFF/HEIC → convert via `nativeImage` → PNG; otherwise store as `type: "file"`.
+2. **Image data** — try helper's `pb-image` (PNG dumped from `NSImage`, catches Chrome/browser OSType flavors Electron misses), then `clipboard.readImage()`.
+3. **Bookmark** — only if `public.url-name` present (Safari attaches it). Plain URL text goes through step 4.
+4. **Text** — plain text preferred; HTML-only → strip tags → text. RTF-only skipped (no parser). Single-URL text → `type: "bookmark"` with no title.
 
-**`images.ts`**
+Format sniffing uses magic bytes (never trust extension). Text dedup by string; images dedup by SHA-1 of PNG bytes. Repeated copies bump `createdAt` instead of creating duplicates.
 
-- `saveImage(nativeImage)`: ghi PNG vào `app.getPath('userData')/clip-images/<uuid>.png`, trả về path.
-- `deleteImageFile(path)`: xoá file, bọc try/catch (best-effort).
+Before the app writes the clipboard itself (during paste), `markClipboardAsCurrent()` sets `suppressUntilMs = Date.now() + 800`. Any capture within that window is silently swallowed (its signature is still updated so we resume dedup after). Time-based rather than consume-once because a paste may trigger multiple `changeCount` bumps (`writeText` + `writeBuffer`) and the helper's multi-phase wait needs coverage.
 
-**`paste.ts`**
+### `store.ts`
 
-- `execFile('osascript', ['-e', 'tell application "System Events" to keystroke "v" using command down'])`.
-- Cần quyền **Accessibility** — macOS tự hiện dialog xin quyền lần đầu gọi. Nếu user chưa cấp quyền: item vẫn nằm trong clipboard hệ thống, user tự bấm `Cmd+V` được — không mất dữ liệu, chỉ mất tự động hoá.
+- `addItem`, `pinItem`, `deleteItem`, `clearAll`, `getItems` — return sorted (pinned first).
+- Cap: when the unpinned list exceeds `settings.maxClips`, the oldest unpinned items are dropped. If a dropped item is an image, its PNG file is deleted (`cleanupOwnedFiles`).
+- `deleteItem` / `clearAll` do the same PNG cleanup.
+- `clearAll` keeps pinned items untouched.
+- One-shot migration on load: legacy `type: "html"` / `type: "rtf"` items are converted to `type: "text"` in place.
 
-**`windowManager.ts`**
+### `images.ts`
 
-- 1 `BrowserWindow` duy nhất dùng chung cho cả "popover nhanh" và "manager" — không tách 2 window riêng.
-- `frame: false`, `alwaysOnTop: true`, `skipTaskbar: true`. **KHÔNG** dùng `type: 'panel'` — Electron 39 có bug với `frame: false` + panel: NSWindow class không support `NSWindowStyleMaskNonactivatingPanel` → warning `NSWindow does not support nonactivating panel styleMask 0x80` và behavior non-activating không thật sự hoạt động.
-- Show bằng `showInactive()` (không phải `show()` + `focus()`): order-front mà không become key window → app user đang gõ vẫn giữ focus/caret khi window mở lên.
-- Khi user click vào item để paste, Electron sẽ activate app ClipStack. Để trả focus về app cũ, [ipcHandlers.ts](src/main/ipcHandlers.ts) gọi `app.hide()` sau khi ghi clipboard — macOS sẽ deactivate ClipStack, app frontmost trước đó quay lại làm key, rồi `simulatePaste()` (Cmd+V) chạy đúng đích sau 80ms.
-- `resetWindowSize()`: set lại 400×500, giữ nguyên toạ độ góc trên-trái hiện tại.
-- **KHÔNG** đăng ký blur handler cho window. Blur trên macOS fire không deterministic (menubar activation từ tray click, showInactive edge cases…) gây race với tray.click: blur hide TRƯỚC tray.click → tray.click thấy `visible=false` → show lại → user cảm giác tray không đóng được. Đóng window qua: mouse-monitor (click ngoài), tray toggle, hotkey toggle, item click (paste + hide qua IPC), Esc. Trade-off: Cmd+Tab switch app không tự đóng — chấp nhận được, user click ngoài hoặc Esc.
-- `hide` event: gọi `stopMouseMonitor()` để tắt global mouse hook.
-- Mỗi lần show: gọi `queryFocusIsTextInput()` để cập nhật `canPaste` + `startMouseMonitor(onGlobalClick)` để bắt click outside → hide.
+- `saveImage(nativeImage)` writes PNG at `userData/clip-images/<uuid>.png`, returns absolute path.
+- `saveImageBytes(bytes, ext)` writes raw bytes with the original extension (SVG / GIF need this — nativeImage can't parse SVG, and encoding GIF drops animation).
+- `deleteImageFile(path)` — best-effort unlink.
 
-**`helper.ts`** + **`native/ClipStackHelper.swift`**
+### `windowManager.ts`
 
-- Persistent Swift child process, spawn 1 lần lúc app khởi động, giao tiếp line-based qua stdin/stdout.
-- 2 chức năng dùng chung 1 quyền Accessibility (đã cấp cho paste):
-    - **AX focus query**: hỏi `AXFocusedUIElement` của app frontmost hiện tại là text-input hay không (role ∈ `AXTextField/AXTextArea/AXSearchField/AXComboBox/AXWebArea`, hoặc `kAXValueAttribute` settable). Trả `focus:1` hoặc `focus:0`. Chi phí per-query: ~5-10ms (không phải 240ms như osascript vì tránh spawn process mới).
-    - **Global mouse monitor**: `NSEvent.addGlobalMonitorForEvents` với mask `[.leftMouseDown, .rightMouseDown, .otherMouseDown]`. Mỗi click bắn `click:<x>,<y>` (toạ độ NSEvent origin bottom-left; Node convert sang top-left dựa vào chiều cao primary screen).
-- Build: `npm run build:helper` (swiftc `-O`). Được auto-run trong `dev`, `build`, `build:mac`.
-- Bundle: `resources/ClipStackHelper` được electron-builder pack vào `asarUnpack` (đã có sẵn `resources/**`).
-- Nếu binary chưa tồn tại lúc app khởi động → helper không spawn → `canPaste` mặc định `false` (paste bị disable) và click outside không auto-close (chỉ đóng qua blur hoặc hotkey re-press).
+- Single `BrowserWindow` doubles as popover and manager (no separate windows).
+- `frame: false`, `alwaysOnTop: true`, `skipTaskbar: true`, `movable: false`, non-resizable.
+- **Do NOT** use `type: 'panel'` — Electron 39 warns `NSWindow does not support nonactivating panel styleMask 0x80` with `frame: false`.
+- Show via `showInactive()` (not `show()` + `focus()`): order-front without becoming key window → the app the user is typing in keeps focus and caret.
+- When a paste happens, Electron temporarily activates ClipStack when the item is clicked. `ipcHandlers.ts` calls `app.hide()` after writing the clipboard, then awaits `did-resign-active` (macOS restores the previous frontmost) before `simulatePasteViaHelper()`. 200ms timeout fallback avoids hangs.
+- **No blur handler.** blur fires non-deterministically on macOS (menubar activation from tray click, showInactive edge cases) and races with tray.click. All close paths are explicit: item click, mouse-monitor outside click, tray toggle, hotkey toggle, Esc.
+- Visible state tracked via a module-level `visible` bool. Do NOT rely on `mainWindow.isVisible()` — after `showInactive()`/`hide()` the AppKit `[NSWindow isVisible]` return lags a few ms → rapid tray clicks read stale state.
 
-### Behavior spec (show/hide)
+### Window show/hide spec
 
-1. **Mở window**: bấm hotkey (mặc định `Cmd+Shift+V`) hoặc click tray icon.
-    - **Position — LOCKED**: window **LUÔN LUÔN** hiện ngay dưới tray icon (`tray.getBounds()`), bất kể mở bằng hotkey hay tray click. Đây là spec cố định — **KHÔNG được đổi sang cursor position hoặc bất kỳ anchor nào khác** trừ khi user yêu cầu trực tiếp thay đổi requirement này.
-    - Dùng `showInactive` → app user đang gõ **giữ nguyên focus/caret**.
-2. **Có thể paste hay không** phụ thuộc vào `queryFocusIsTextInput()` chạy ngay lúc show:
-    - Có text-input focus: renderer nhận `canPaste=true` → item click enabled → paste vào đúng text field đó.
-    - Không có: renderer nhận `canPaste=false` → item click disabled (opacity mờ + cursor not-allowed + title tooltip). Item click là no-op.
-3. **Đóng window** — 4 cách (tất cả explicit, không dùng blur):
-    - Click 1 item → paste + hide.
-    - Click ra ngoài window (bất kỳ đâu, kể cả app khác/Desktop) → `ClipStackHelper` bắn `click:<x>,<y>` → main check bounds (trong window/trong tray → skip; ngoài → hide).
-    - Bấm lại hotkey hoặc click tray → toggle → hide.
-    - Bấm `Esc` khi window có key → hide qua IPC.
-4. **KHÔNG dùng blur handler** — root cause của bug tray toggle. macOS fire blur không deterministic, hide bằng blur race với tray.click. Trade-off Cmd+Tab: chấp nhận không tự đóng.
-5. **State visible track explicit** (biến `visible` module-level trong windowManager), sync với event `show`/`hide`. **KHÔNG** dùng `mainWindow.isVisible()` cho logic toggle — Electron trả state chưa đồng bộ ngay sau `showInactive()`/`hide()`.
+1. **Open** via hotkey (default `⌘⇧V`) or tray click.
+   - **Position — LOCKED**: window always appears directly under the tray icon (`tray.getBounds()`). This is a fixed spec — do not switch to cursor position or any other anchor without the user explicitly asking.
+   - Uses `showInactive()` → the user's typing keeps focus/caret.
+2. **Close** — four explicit paths:
+   - Click an item → paste + hide.
+   - Click outside the window (helper's global mouse monitor emits `click:<x>,<y>`; main checks bounds and hides if outside window and outside the menubar strip).
+   - Press hotkey again or click tray again → toggle.
+   - Press `Esc` while the window is key → hide via IPC.
+3. **No blur handler** — root cause of the historical tray-toggle bug. Trade-off: Cmd+Tab doesn't auto-close ClipStack (acceptable — user can click out or press Esc).
 
-**`tray.ts`**
+### `helper.ts` + `native/ClipStackHelper.swift`
 
-- Đọc icon từ `resources/trayIconTemplate.png` (+ `@2x.png` cho Retina) — **do user cung cấp**, không dùng emoji placeholder.
-- Click → `toggleWindow(true)` (fromTray flag để windowManager biết cần guard blur race).
+Persistent Swift child spawned once at boot, line-based protocol over stdin/stdout. One Accessibility grant powers three features:
 
-**`hotkey.ts`**
+- **Global mouse monitor** — `NSEvent.addGlobalMonitorForEvents([.leftMouseDown, .rightMouseDown, .otherMouseDown])`. Each click emits `click:<x>,<y>` (NSEvent bottom-left coords; Node flips to top-left using primary display height).
+- **Pasteboard change watch** — `DispatchSource.makeTimerSource` polling `NSPasteboard.general.changeCount` at 100ms on a utility queue. Emits `pb-files:` and `pb-image:` (always, even empty, to clear Node cache), then `clipboard-changed:<n>`.
+- **Paste** — activates the last non-self target (tracked live via `NSWorkspace.didActivateApplication`), polls `isActive == true` (hard-stop 300ms), then posts `Cmd-down` / `V-down` / `V-up` / `Cmd-up` as `CGEvent`s. Explicit modifier sequence is required — several Chromium/Electron apps ignore Cmd flag on V alone.
 
-- `registerHotkey()` lúc khởi động app (đọc từ settings).
-- `changeHotkey(accelerator)`: unregister cũ, thử register mới; nếu fail (trùng app khác / string sai) → rollback về hotkey cũ, trả `{ ok: false, error }`.
+Chrome/browser copies are multi-phase: `declareTypes` may run twice ~100-200ms apart. `waitForPasteboardReady` waits up to 500ms for types to appear, then if the source looks browser-origin (`org.chromium.` / `com.apple.WebKit.` / `com.microsoft.Edge.` UTIs) up to 200ms more for the image phase. This coalesces "1 copy → 2 items" into a single emit.
 
-## 6. Renderer — hành vi từng component
+Build: `npm run build:helper:universal` runs `swiftc` twice (arm64 + x86_64), `lipo` merges → `resources/ClipStackHelper`. Also invoked automatically by `dev`, `build`, `build:mac`.
 
-- **`TopBar`**: icon trái = gọi `window:reset-size`; icon phải = toggle hiển thị `SettingsPanel` (thay cho Tabs+ClipboardTab khi đang mở).
-- **`Tabs`**: 2 tab `Clipboard` (mặc định) / `Icons` (rỗng, để làm sau).
-- **`ClipboardTab`**: header đếm số item + nút `Clear All` (disable nếu list rỗng); list item bên dưới.
-- **`ClipboardItemRow`**: click vào nội dung → `paste-item`; hover hiện 2 icon nhỏ (pin/xoá) chặn `stopPropagation` để không trigger paste; ảnh hiện thumbnail (`<img src="file://...">`), text hiện tối đa 3 dòng rồi truncate.
-- **`SettingsPanel`**: click vào ô hotkey → bắt `onKeyDown`, build accelerator string từ modifier keys (`Command`/`Control`/`Alt`/`Shift`) + phím chính; nút Lưu gọi `settings:set-hotkey`, hiện lỗi nếu `ok: false`.
-- App-level: `Esc` → nếu đang mở Settings thì đóng Settings, ngược lại ẩn cả window.
+Path resolution (production vs dev): main tries `process.resourcesPath/app.asar.unpacked/resources/ClipStackHelper` first, then `process.resourcesPath/resources/...`, then `__dirname/../../resources/...` (dev). The first matches the electron-builder `asarUnpack: resources/**` output.
 
-## 7. Build & phân phối
+If the binary isn't present or Accessibility isn't granted, the helper still spawns but paste doesn't work, mouse monitor returns nil, and clipboard watch works but Node falls back to `setInterval`.
+
+### `tray.ts`
+
+- Loads icon from `resources/trayIconTemplate.png` (+ `@2x.png`). The `Template` suffix tells macOS to auto-tint monochrome (must be black + alpha only; any coloured pixels will render wrong in dark mode).
+- `tray.setIgnoreDoubleClickEvents(true)` — every physical tap fires `click` immediately, no ~250ms debounce.
+- Left-click → `toggleWindow()`. Right-click → context menu (`Show ClipStack`, `Quit`).
+
+### `hotkey.ts`
+
+- `registerHotkey()` on boot from stored settings.
+- `changeHotkey(accelerator)` unregisters the current one, tries the new one; on failure (already-used / invalid) rolls back to the previous binding and returns `{ ok: false, error }`.
+
+### `screencapture.ts`
+
+`ensureScreenshotTargetIsClipboard()` runs on `whenReady`: reads `defaults read com.apple.screencapture target`; if not `clipboard`, writes it + `killall SystemUIServer` so `⌘⇧3/4/5` land on the pasteboard. Idempotent. Not restored on quit — the whole reason to install ClipStack is this behaviour. Undo manually:
+
+```
+defaults delete com.apple.screencapture target && killall SystemUIServer
+```
+
+`globalShortcut.register('Command+Shift+4')` interception was tried and does NOT work: WindowServer consumes the shortcut below Carbon `RegisterEventHotKey`, callback never fires.
+
+### `ipcHandlers.ts` — paste flow
+
+```
+ClipboardPasteItem(id):
+  writeItemToClipboard(item)            # text | bookmark | file | image
+  markClipboardAsCurrent()              # 800ms suppress window
+  hideWindow()                          # UI dismiss
+  app.once('did-resign-active', paste)  # wait until macOS restores prev target
+  setTimeout(paste, 200)                # timeout fallback
+  app.hide()                            # trigger the resign
+```
+
+Image write path branches on SVG detection (`sniffUti` — first 2KB text scan for `<svg`). SVG becomes clipboard text (source); rasters use `clipboard.write({ image: nativeImage.createFromBuffer(bytes) })` which declares TIFF/PNG via NSPasteboard writeObjects. `writeBuffer("public.svg-image", ...)` was tried and silent-fails on macOS: Electron doesn't call `declareTypes:owner:` first → user pastes empty.
+
+## 6. Renderer
+
+- **`App`** — `AppShell` with `AccessibilityBanner` on top, then `TabView`.
+- **`TabView`** — three tabs: `Clipboard` (default), `Icons` (placeholder), `Settings`. Esc key closes settings if open, otherwise hides the window.
+- **`ClipboardTab`** — header (count / cap / `Clear All` when there are unpinned items), then list.
+- **`ClipboardItemRow`** — icon + body + hover actions (pin/unpin, delete). Body varies by type: text (3-line clamp), image (`clip-image://local/...` custom scheme, max 120px), bookmark (title + URL), file (basename + full path). Clicking anywhere except the action buttons triggers paste.
+- **`SettingsTab`** — hotkey input (records `keydown`, builds accelerator, displays with ⌘⇧⌃⌥ symbols), max-clips input (clamped `[1, 200]`, commits on blur / Enter).
+- **`AccessibilityBanner`** — shows only when `isTrustedAccessibilityClient(false)` is false. Polls every 300ms + re-checks on window focus / visibilitychange. When trust flips `false → true` calls `window.clipstack.relaunch()` so the Swift helper re-inits with permission from scratch. In dev, `relaunch` is a no-op (electron-vite spawn is incompatible with `app.relaunch()`).
+
+`window.clipstack` is the surface exposed by [`preload/index.ts`](src/preload/index.ts) via `contextBridge`. Renderer talks to main only through those methods and the `onItemsUpdated` push event.
+
+## 7. Build & distribution
 
 ```bash
-npm install
-npm run dev          # electron-vite dev, test trực tiếp trên máy
-npm run build:mac    # typecheck + build + electron-builder → file .dmg trong dist/
+yarn                    # postinstall: fix-electron.sh + electron-builder install-app-deps
+yarn dev                # electron-vite dev
+yarn build:mac          # → dist/clipstack-1.0.0-arm64.dmg + -x64.dmg
 ```
 
-- Không sign/notarize (không cần Apple Developer account $99/năm).
-- Vì không sign: lần đầu mở trên máy nào cũng cần `xattr -cr ClipStack.app` hoặc right-click → Open để qua Gatekeeper.
-- Quyền Accessibility: System Settings → Privacy & Security → Accessibility → cấp cho ClipStack (macOS tự nhắc lần đầu dùng tính năng paste).
+- No signing, no notarization. `build:mac*` scripts run with `CSC_IDENTITY_AUTO_DISCOVERY=false` (or via install docs).
+- End-user install: `curl -fsSL https://.../install.sh | bash` — mounts DMG, copies to `/Applications`, runs `xattr -cr`.
 
-### Yêu cầu hệ thống (chạy được app đã build)
+### System requirements (users)
 
-| Mục            | Yêu cầu tối thiểu                                                            |
-| -------------- | ---------------------------------------------------------------------------- |
-| Hệ điều hành   | **macOS 11 Big Sur** trở lên (Electron 39 drop support 10.15 Catalina)       |
-| Kiến trúc CPU  | Apple Silicon (M1/M2/M3/M4) **hoặc** Intel x64                               |
-| RAM            | 4 GB+ (Electron runtime ~150-200 MB idle)                                    |
-| Disk           | ~200 MB cho app + tuỳ số clip (mỗi ảnh screenshot ~1-3 MB)                   |
-| Quyền cần cấp  | Accessibility (bắt buộc để simulate Cmd+V)                                   |
+| Item              | Minimum                                                                  |
+| ----------------- | ------------------------------------------------------------------------ |
+| OS                | macOS 11 Big Sur (Electron 39 drops 10.15 Catalina)                      |
+| CPU               | Apple Silicon (M1+) or Intel x64                                         |
+| RAM               | 4 GB+ (~150-200 MB idle for Electron)                                    |
+| Disk              | ~200 MB app + variable per image clip (1-3 MB per screenshot)            |
+| Permissions       | Accessibility (needed for auto Cmd+V paste and outside-click detection)  |
 
-**Máy nào chạy được**:
+### Two DMGs vs universal
 
-- MacBook Air / Pro (2018+): OK — mặc định lên được Big Sur.
-- MacBook Air / Pro (M1+, 2020+): OK — Apple Silicon.
-- iMac (2015+), Mac mini (2018+), Mac Studio, Mac Pro (2019+): OK nếu update macOS 11+.
-- **Không chạy được**: máy dưới macOS 10.15 Catalina — mostly Mac từ 2012 và cũ hơn không update lên được Big Sur.
-
-**Không hỗ trợ iOS/iPadOS** — Electron chỉ chạy desktop (macOS/Windows/Linux), không port qua iOS.
-
-### Build 2 DMG riêng: Apple Silicon + Intel
-
-Cấu hình sẵn ở [electron-builder.yml](electron-builder.yml) → `npm run build:mac` xuất **2 file DMG** trong `dist/`:
-
-```
-clipstack-1.0.0-arm64.dmg   # cho Mac M-series (M1/M2/M3/M4)
-clipstack-1.0.0-x64.dmg     # cho Mac Intel
-```
-
-**Điều kiện tiên quyết**: Swift helper phải là **universal binary** (chứa cả arm64 + x64 slice). Script `build:helper:universal` compile 2 lần với `-target arm64-apple-macos11` và `-target x86_64-apple-macos11` rồi `lipo -create` gộp lại. `npm run build:mac` đã tự chạy step này.
-
-Kiểm tra helper universal:
-
-```bash
-file resources/ClipStackHelper
-# → Mach-O universal binary with 2 architectures: [x86_64:...] [arm64:...]
-```
-
-**Build chỉ 1 arch** (nhanh hơn, dùng khi test):
-
-```bash
-npm run build:mac:arm64   # chỉ M-series
-npm run build:mac:x64     # chỉ Intel
-```
-
-**Alternative: universal DMG duy nhất** (1 file chạy cả 2 arch, size ~2x):
+`electron-builder.yml` produces two separate DMGs (`arm64` + `x64`), smaller per-file. Alternative single universal DMG (~2× the size):
 
 ```yaml
 mac:
@@ -252,87 +273,62 @@ mac:
           arch: universal
 ```
 
-Trade-off: universal DMG gấp đôi size (~300 MB) — 2 arch riêng nhỏ hơn nhưng user phải chọn đúng khi tải về.
+Prerequisite: helper must be a **universal binary** — verify with `file resources/ClipStackHelper` (should read `Mach-O universal binary with 2 architectures`). `build:mac` calls `build:helper:universal` which does that.
 
-## 8. Checklist thứ tự implement (đề xuất)
+## Runtime paths
 
-1. Scaffold project (`package.json`, `electron.vite.config.ts`, tsconfig)
-2. `shared/types.ts`, `shared/ipc.ts`
-3. `main/store.ts` + `main/images.ts` (có cleanup ảnh khi xoá/trim cap)
-4. `main/clipboardWatcher.ts` (dùng hash, không dùng toDataURL để so sánh ảnh)
-5. `main/windowManager.ts`, `main/tray.ts`, `main/hotkey.ts`
-6. `main/paste.ts`, `main/ipcHandlers.ts`, `main/index.ts` (wiring)
-7. `preload/index.ts` + `index.d.ts`
-8. Renderer: `App.tsx` + toàn bộ component trong mục 6
-9. `electron-builder.yml` (mac target `dmg`, category `public.app-category.utilities`)
-10. Test trên Mac thật: `npm run dev` → thử copy text/ảnh, pin/xoá, đổi hotkey, paste
-11. `npm run build:mac` → test file `.dmg` xuất ra
-
-## Runtime paths (macOS)
-
-**Folder ảnh clipboard**:
-
+Clip images:
 ```
-/Users/brianpgrt/Library/Application Support/clipstack/clip-images
+~/Library/Application Support/clipstack/clip-images/<uuid>.<ext>
 ```
 
-Base = `app.getPath("userData")` (xem [images.ts](src/main/images.ts)). Mỗi image: `<uuid>.<ext>`, ext theo format thật (sniff magic bytes tại [clipboardWatcher.ts](src/main/clipboardWatcher.ts) — `sniffImageFormat`).
+Extension rules:
+- Copying a file from Finder → original extension preserved: `png / jpg / gif / bmp / webp / svg / ico / avif`. `tiff` / `heic` are converted to PNG (Chromium `<img>` can't render them).
+- Copying image data (screenshot, Preview, Photoshop, Figma, browser "Copy Image") → always `.png`. Pasteboard has raw pixels only; the Swift helper decodes via NSImage → PNG.
 
-Rule ext:
-
-- **Copy file ảnh từ Finder** → giữ ext gốc: `png / jpg / gif / bmp / webp / svg / ico / avif`. Riêng `tiff / heic` convert sang `png` (Chromium `<img>` không render).
-- **Copy image data (không phải file)** — screenshot, Preview, Photoshop, Figma, browser "Copy Image" — **luôn `.png`**. Vì pasteboard chỉ có raw pixel data, helper Swift decode qua `NSImage` → PNG.
-
-Mở nhanh trong Finder:
-
+electron-store settings JSON:
 ```
-open "/Users/brianpgrt/Library/Application Support/clipstack/clip-images"
+~/Library/Application Support/clipstack/clipstack.json
 ```
 
-Settings JSON (electron-store):
-
+Open the images folder quickly:
 ```
-/Users/brianpgrt/Library/Application Support/clipstack/clipstack.json
-```
-
-## Behavior override macOS
-
-**Screenshot target = clipboard**: [screencapture.ts](src/main/screencapture.ts) chạy lúc `whenReady` → `defaults write com.apple.screencapture target clipboard` + `killall SystemUIServer` (idempotent, skip nếu đã set). Sau đó `Cmd+Shift+3/4/5` bỏ ảnh thẳng vào clipboard → watcher pick up.
-
-Không auto-restore lúc quit (user cài ClipStack chính vì behavior này). Undo:
-
-```
-defaults delete com.apple.screencapture target && killall SystemUIServer
+open "$HOME/Library/Application Support/clipstack/clip-images"
 ```
 
-Đã thử approach `globalShortcut.register('Command+Shift+4')` để intercept — **fail**: macOS WindowServer consume phím ở tầng dưới Carbon `RegisterEventHotKey`, callback không fire. Không quay lại hướng đó.
+## 8. Non-obvious gotchas
 
-## 9. Ngoài phạm vi MVP (làm sau)
+- **`ELECTRON_RUN_AS_NODE=1` env leak** — electron-vite's bytecode compiler sets this in the shell it spawns; if it leaks into your terminal the built app silently exits on launch (`electron.app` becomes undefined because Electron ran as pure Node). Open a fresh terminal or `unset ELECTRON_RUN_AS_NODE`.
+- **`extract-zip` npm hang** — `node_modules/electron/dist/` sometimes contains only `LICENSES.chromium.html` after `yarn install` on some Node versions. `scripts/fix-electron.sh` re-extracts from `~/Library/Caches/electron/<hash>/electron-v<ver>-darwin-<arch>.zip` via `ditto`; wired into `postinstall`.
+- **Do not `codesign --deep --force --sign - ClipStack.app`** — corrupts the bundle so it fails with `task_name_for_pid: (os/kern) failure (5)` on launch. Leave the app unsigned; install.sh handles quarantine.
+- **Accessibility permission on unsigned rebuilds** — each `yarn build:mac` produces a new ad-hoc linker signature, so macOS treats it as a "different" app and doesn't remember Accessibility grants across rebuilds. The banner auto-relaunches after grant so end-users see this exactly once per install. Developers pay the tax on every rebuild.
+- **`app.relaunch()` in dev** — spawns Electron with the raw binary path and bypasses electron-vite's dev server → renderer loads blank. `SystemRelaunch` handler gates on `app.isPackaged`; in dev it just logs.
+- **macOS 14+ Cooperative Activation** — pasting immediately after `app.hide()` lands `⌘V` inside ClipStack because the target isn't yet frontmost. The `did-resign-active` wait + helper's `isActive` poll fix this.
+- **Chrome/Facebook multi-phase copies** — `changeCount` bumps twice within ~200ms (first text-only, then image). Helper's `waitForPasteboardReady` coalesces them so we don't add a text item then a duplicate image item.
 
-- Tab "Icons" (nội dung để trống, bạn định nghĩa sau)
-- Search
-- Sync nhiều máy / iCloud
-- Phân phối qua Mac App Store (cần sandbox + entitlements riêng, khác hẳn hướng hiện tại)
+## 9. Electron API — versioning
 
-## code follow https://www.electronjs.org/ và làm best practice mới nhất
+Version pinned: `electron ^39.2.6` (see `package.json`).
 
-## Electron API — CHUẨN
+Reference docs:
+- <https://www.electronjs.org/docs/latest/api/app>
+- <https://www.electronjs.org/docs/latest/api/browser-window>
+- <https://www.electronjs.org/docs/latest/api/tray>
+- <https://www.electronjs.org/docs/latest/api/clipboard>
+- <https://www.electronjs.org/docs/latest/api/native-image>
+- <https://www.electronjs.org/docs/latest/api/system-preferences>
 
-**Version pinned**: `electron ^39.2.6` (xem `package.json`). Docs tham chiếu:
+**Caution**: `/docs/latest/` tracks main branch and may list APIs not yet in the shipped v39. Before using any new API, verify against the local `node_modules/electron/electron.d.ts` or run typecheck.
 
-- [app](https://www.electronjs.org/docs/latest/api/app)
-- [browser-window](https://www.electronjs.org/docs/latest/api/browser-window)
-- [tray](https://www.electronjs.org/docs/latest/api/tray)
-- [clipboard](https://www.electronjs.org/docs/latest/api/clipboard)
-- [native-image](https://www.electronjs.org/docs/latest/api/native-image)
+APIs known **not** to exist in Electron 39 (docs latest shows them):
+- `app.isActive()` — track state via `did-become-active` / `did-resign-active` events or `BrowserWindow.getFocusedWindow() !== null`.
 
-**CẢNH BÁO**: docs URL `/docs/latest/` track branch mới nhất, có API xuất hiện trước khi ship trong Electron 39. Trước khi dùng bất kỳ API nào, **verify** nó tồn tại trong v39 shipped bằng:
+When adding or changing an Electron API, verify it exists in v39 — don't code from memory.
 
-- Grep trong `node_modules/electron/electron.d.ts`
-- Hoặc test compile TS (nếu missing → TS error `Property 'X' does not exist on type 'App'`)
+## 10. Out of scope for MVP (later)
 
-**APIs đã verify KHÔNG tồn tại trong Electron 39** (docs latest có, shipped không):
-
-- `app.isActive()` → thay bằng track state qua event `did-become-active` / `did-resign-active`, hoặc `BrowserWindow.getFocusedWindow() !== null`
-
-Khi thêm/đổi Electron API, follow docs chính thức + verify version. Không code dựa vào memory/guess.
+- `Icons` tab content (placeholder for now).
+- Full-text search.
+- iCloud / multi-device sync.
+- Mac App Store distribution (requires sandbox + entitlements — very different from current setup).
+- Signed + notarized DMG (needs Apple Developer $99/year).

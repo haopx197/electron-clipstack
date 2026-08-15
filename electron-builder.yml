@@ -21,11 +21,12 @@ nsis:
 mac:
     category: public.app-category.utilities
     minimumSystemVersion: "11.0"
-    # Build unsigned: set `CSC_IDENTITY_AUTO_DISCOVERY=false` khi chạy `npm run
-    # build:mac`. install.sh dùng `xattr -cr` để tránh cảnh báo Gatekeeper.
-    # KHÔNG hardcode `identity: null` (skip sign hoàn toàn tạo bundle broken) và
-    # KHÔNG chạy `codesign --deep --force` thủ công trên .app — cả 2 gây
-    # `task_name_for_pid: (os/kern) failure (5)` khi app khởi động.
+    # Build unsigned: set `CSC_IDENTITY_AUTO_DISCOVERY=false` when running
+    # `npm run build:mac`. install.sh uses `xattr -cr` to avoid the Gatekeeper
+    # warning. Do NOT hardcode `identity: null` (skipping signing entirely
+    # produces a broken bundle) and do NOT run `codesign --deep --force`
+    # manually on the .app — both cause `task_name_for_pid: (os/kern)
+    # failure (5)` on launch.
     target:
         - target: dmg
           arch:
@@ -38,7 +39,7 @@ mac:
         - NSAccessibilityUsageDescription: ClipStack simulates ⌘V to paste your selected clipboard item into the active app.
     notarize: false
 dmg:
-    # ${arch} = arm64 / x64 → xuất 2 file DMG riêng, không đè nhau.
+    # ${arch} = arm64 / x64 → produce two separate DMGs (no overwrite).
     artifactName: ${name}-${version}-${arch}.${ext}
 linux:
     target:

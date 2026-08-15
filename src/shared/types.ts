@@ -5,17 +5,17 @@ export type ClipboardItem = {
     type: ClipboardItemType;
     /**
      * Primary payload:
-     * - text:     the raw text
-     * - image:    absolute path to file inside userData/clip-images
-     * - bookmark: the URL
-     * - file:     the absolute path to the copied file (owned by the user, not by ClipStack)
+     * - text:     raw text content
+     * - image:    absolute path to file in userData/clip-images
+     * - bookmark: URL
+     * - file:     absolute path to user-owned file (not managed by ClipStack)
      */
     content: string;
     /** Plain-text preview for bookmark. */
     preview?: string;
-    /** Title of a bookmark. */
+    /** Bookmark title. */
     bookmarkTitle?: string;
-    /** File name (basename) for the 'file' type — cached for display. */
+    /** Cached basename for type 'file' — used for display. */
     fileName?: string;
     pinned: boolean;
     createdAt: number;

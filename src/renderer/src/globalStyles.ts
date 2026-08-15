@@ -7,7 +7,7 @@ export const GlobalStyles = createGlobalStyle`
         --color-text: #141B34;
         --color-text-strong: #2b2d31;
         --color-border: #DADADB;
-        --color-bg: #ffffff;
+        --color-white: #ffffff;
 
         --font: "Google Sans", -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
     }
@@ -29,7 +29,7 @@ export const GlobalStyles = createGlobalStyle`
         font-family: var(--font);
         font-size: 14px;
         color: var(--color-text);
-        background: var(--color-bg);
+        background: var(--color-white);
         user-select: none;
         cursor: default;
     }

@@ -8,8 +8,8 @@ import { changeHotkey } from "./hotkey";
 import { getMainWindow, hideWindow } from "./windowManager";
 import { ClipboardItem } from "../shared/types";
 
-// Detect SVG từ MAGIC/content — cần biết để tách flow paste (SVG không đi qua
-// nativeImage). Các format raster khác auto detect qua nativeImage.createFromBuffer.
+// Detect SVG to split paste flow (SVG doesn't go through nativeImage). Other
+// rasters are auto-detected via nativeImage.createFromBuffer.
 function sniffUti(bytes: Buffer): "public.svg-image" | null {
     if (bytes.length < 4) return null;
     const head = bytes.subarray(0, 2048).toString("utf8");
@@ -26,7 +26,7 @@ function writeItemToClipboard(item: ClipboardItem): void {
             return;
         }
         case "bookmark": {
-            // Electron `clipboard.write()`: `bookmark` = title, URL đi trong `text`.
+            // Electron `clipboard.write()`: `bookmark` = title, URL goes in `text`.
             clipboard.write({
                 text: item.content,
                 bookmark: item.bookmarkTitle ?? ""
@@ -34,7 +34,7 @@ function writeItemToClipboard(item: ClipboardItem): void {
             return;
         }
         case "file": {
-            // Path text (cho text editor) + file-url UTI (cho Finder/File apps).
+            // Path text (for text editors) + file-url UTI (for Finder/File apps).
             clipboard.writeText(item.content);
             try {
                 clipboard.writeBuffer(
@@ -42,7 +42,7 @@ function writeItemToClipboard(item: ClipboardItem): void {
                     Buffer.from(`file://${encodeURI(item.content)}`, "utf8")
                 );
             } catch {
-                // best-effort
+                // best-effort — ignore
             }
             return;
         }
@@ -55,19 +55,16 @@ function writeItemToClipboard(item: ClipboardItem): void {
             }
             const uti = sniffUti(bytes);
 
-            // SVG: chỉ write text (source). KHÔNG dùng `writeBuffer("public.svg-image")`
-            // vì Apple docs `setData:forType:` yêu cầu `declareTypes:owner:` gọi trước,
-            // mà Electron writeBuffer KHÔNG declare → setData silent-fail hoặc corrupt
-            // pasteboard state → user paste ra rỗng. Text-only đảm bảo paste vào text
-            // editor (Notes/Slack/TextEdit) luôn ra SVG source. (Vector paste vào Figma
-            // cần render SVG → PNG trước, không làm ở MVP.)
+            // SVG: write text (source) only. writeBuffer("public.svg-image")
+            // silent-fails because Electron doesn't call `declareTypes:owner:`
+            // before setData → user pastes empty.
             if (uti === "public.svg-image") {
                 clipboard.writeText(bytes.toString("utf8"));
                 return;
             }
 
-            // Raster formats: `clipboard.write({image})` dùng NSPasteboard writeObjects
-            // — auto declare types NSPasteboardTypeTIFF/PNG. Apps đọc image standard OK.
+            // Raster: `clipboard.write({image})` uses NSPasteboard writeObjects —
+            // auto-declares TIFF/PNG. Standard image consumers work fine.
             const image = nativeImage.createFromBuffer(bytes);
             if (!image.isEmpty()) {
                 clipboard.write({ image });
@@ -87,19 +84,11 @@ export function registerIpcHandlers(): void {
         writeItemToClipboard(item);
         markClipboardAsCurrent();
         hideWindow();
-        // Item click activate app ClipStack (window default focusable). Cần yield
-        // activation cho target TRƯỚC KHI Cmd+V, else macOS 14+ Cooperative
-        // Activation chặn helper's `target.activate()` → Cmd+V bay vào ClipStack.
-        //
-        // Dùng event `did-resign-active` (Electron API chuẩn) chờ app THỰC SỰ
-        // deactivate xong (macOS đã restore target frontmost) rồi mới paste →
-        // deterministic. Bug cũ "paste chỉ được lần đầu" là do fire-and-forget
-        // `app.hide()` + immediate paste: lần 2, helper's poll 300ms không kịp
-        // thấy target active → Cmd+V lạc chỗ.
-        //
-        // Fallback 200ms để không hang: nếu app đã không active (rare) hoặc
-        // event không fire vì race, vẫn paste. Native poll bên Swift helper
-        // (300ms hardstop) bắt tiếp cho case target chưa reactivate.
+        // Wait for app resign-active (macOS restored frontmost target) before paste.
+        // macOS 14+ Cooperative Activation blocks helper's `target.activate()`
+        // if we paste immediately → Cmd+V lands in ClipStack. Old "paste only
+        // works first time" bug had same cause: on 2nd try helper's 300ms poll
+        // didn't catch target active in time. 200ms fallback to avoid hang.
         let done = false;
         const onResign = (): void => {
             if (done) return;
@@ -124,7 +113,7 @@ export function registerIpcHandlers(): void {
     ipcMain.handle(IPC.SettingsGetHotkey, () => getHotkey());
     ipcMain.handle(IPC.SettingsSetHotkey, (_e, accelerator: string) => changeHotkey(accelerator));
 
-    // isTrustedAccessibilityClient(false) = check-only, không trigger native prompt.
+    // `false` = check-only, don't trigger native prompt.
     ipcMain.handle(IPC.SystemAccessibilityStatus, () =>
         systemPreferences.isTrustedAccessibilityClient(false)
     );
@@ -134,6 +123,12 @@ export function registerIpcHandlers(): void {
         )
     );
     ipcMain.handle(IPC.SystemRelaunch, () => {
+        // Dev mode: app.relaunch() bypasses vite dev server → blank renderer.
+        // Skip auto-relaunch; restart manually in dev.
+        if (!app.isPackaged) {
+            console.log("[clipstack] skip auto-relaunch in dev mode; restart manually");
+            return;
+        }
         app.relaunch();
         app.exit(0);
     });

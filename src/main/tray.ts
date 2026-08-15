@@ -26,11 +26,8 @@ export function createTray(): Tray {
 
     tray = new Tray(image);
     tray.setToolTip("ClipStack");
-    // Tắt double-click detection: macOS mặc định chờ ~250ms sau click 1 xem có
-    // click 2 không → single click bị delay, rapid click bị nuốt thành double-click
-    // event. `setIgnoreDoubleClickEvents(true)` (Electron docs macOS-only API) →
-    // mỗi physical tap fire `click` event NGAY LẬP TỨC, không delay, không nuốt.
-    // Kết quả: tray toggle behavior giống hotkey (fire per key press).
+    // Disable double-click detection so each tap fires `click` immediately —
+    // no ~250ms delay or swallowed double-click → toggle as fast as hotkey.
     tray.setIgnoreDoubleClickEvents(true);
 
     tray.on("click", () => {

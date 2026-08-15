@@ -5,6 +5,13 @@ REPO="haopx197/electron-clipstack"
 APP_NAME="ClipStack"
 VERSION="1.0.0"
 
+# ANSI colors (fall back to no-color when stdout isn't a TTY).
+if [[ -t 1 ]]; then
+    C_BOLD="\033[1m"; C_DIM="\033[2m"; C_YELLOW="\033[33m"; C_GREEN="\033[32m"; C_RESET="\033[0m"
+else
+    C_BOLD=""; C_DIM=""; C_YELLOW=""; C_GREEN=""; C_RESET=""
+fi
+
 if [[ "$(uname)" != "Darwin" ]]; then
     echo "This installer is for macOS only." >&2
     exit 1
@@ -29,10 +36,20 @@ cleanup() {
 }
 trap cleanup EXIT
 
-echo "→ Downloading ${APP_NAME} (${ARCH})..."
+# Upfront expectation — download is ~110MB and the recursive xattr sweep on
+# Electron's Frameworks tree takes a while. Set the mental model early so the
+# user doesn't think the script is stuck.
+echo ""
+echo -e "${C_BOLD}Installing ${APP_NAME} for ${ARCH}${C_RESET}"
+echo -e "${C_DIM}Expected total time: 30 s – 2 min depending on your connection."
+echo -e "  • Download DMG (~110 MB) — most of the wait."
+echo -e "  • Mount, copy to /Applications, clear macOS quarantine.${C_RESET}"
+echo ""
+
+echo -e "${C_YELLOW}→${C_RESET} Downloading DMG… ${C_DIM}(largest step; progress below)${C_RESET}"
 curl -fL --progress-bar "$URL" -o "$TMP_DMG"
 
-echo "→ Mounting DMG..."
+echo -e "${C_YELLOW}→${C_RESET} Mounting DMG…"
 MOUNT_POINT="$(hdiutil attach "$TMP_DMG" -nobrowse -readonly -mountrandom /tmp | grep -Eo '/tmp/[^ ]+' | tail -1)"
 
 if [[ -z "$MOUNT_POINT" || ! -d "$MOUNT_POINT/${APP_NAME}.app" ]]; then
@@ -41,17 +58,18 @@ if [[ -z "$MOUNT_POINT" || ! -d "$MOUNT_POINT/${APP_NAME}.app" ]]; then
 fi
 
 if [[ -d "/Applications/${APP_NAME}.app" ]]; then
-    echo "→ Removing previous install..."
+    echo -e "${C_YELLOW}→${C_RESET} Removing previous install…"
     rm -rf "/Applications/${APP_NAME}.app"
 fi
 
-echo "→ Copying to /Applications..."
+echo -e "${C_YELLOW}→${C_RESET} Copying to /Applications… ${C_DIM}(~5 s)${C_RESET}"
 cp -R "$MOUNT_POINT/${APP_NAME}.app" /Applications/
 
-echo "→ Clearing quarantine attribute..."
+# xattr -cr traverses ~2000 files inside the Electron bundle → 5-15 s.
+echo -e "${C_YELLOW}→${C_RESET} Clearing macOS quarantine… ${C_DIM}(may take 5-15 s, don't cancel)${C_RESET}"
 xattr -cr "/Applications/${APP_NAME}.app"
 
 echo ""
-echo "✅ ${APP_NAME} installed."
-echo "   Launch from Launchpad or run: open -a ${APP_NAME}"
-echo "   Grant Accessibility permission when macOS asks."
+echo -e "${C_GREEN}✅ ${APP_NAME} installed.${C_RESET}"
+echo -e "   Launch from Launchpad or run: ${C_BOLD}open -a ${APP_NAME}${C_RESET}"
+echo -e "   Grant Accessibility permission when the in-app banner asks."

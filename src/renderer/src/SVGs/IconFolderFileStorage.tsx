@@ -1,4 +1,4 @@
-export function IconFolderFileStorage({ color = "#141B34", ...props }) {
+export function IconFolderFileStorage({ color = "#000", ...props }) {
     return (
         <svg
             xmlns="http://www.w3.org/2000/svg"

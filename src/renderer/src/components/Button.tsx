@@ -42,9 +42,14 @@ const variantStyles = {
         background-color: transparent;
         color: #000;
         width: 28px;
+        border-radius: 28px;
 
         &:hover {
-            background-color: #ebeef1;
+            background-color: var(--color-primary);
+        }
+
+        &:hover svg {
+            color: #fff;
         }
     `
 };
@@ -56,7 +61,7 @@ const StyledButton = styled.button<{ $variant: Variant; $danger: boolean }>`
     align-items: center;
     justify-content: center;
     height: 28px;
-    border-radius: 28px;
+    border-radius: 8px;
     border: none;
     font-size: 12px;
     cursor: pointer;
@@ -72,6 +77,5 @@ const StyledButton = styled.button<{ $variant: Variant; $danger: boolean }>`
         css`
             background-color: var(--color-error);
             color: var(--color-white);
-            border-radius: 8px;
         `}
 `;

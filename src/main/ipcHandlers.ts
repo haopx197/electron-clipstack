@@ -18,6 +18,7 @@ import { simulatePasteViaHelper } from "./helper";
 import { changeHotkey } from "./hotkey";
 import { getMainWindow, hideWindow } from "./windowManager";
 import { applyCaptureToClipboard } from "./screencapture";
+import { getUpdateStatus, installUpdate } from "./updater";
 import { ClipboardItem } from "../shared/types";
 
 // Detect SVG to split paste flow (SVG doesn't go through nativeImage). Other
@@ -122,6 +123,16 @@ export function registerIpcHandlers(): void {
     ipcMain.handle(IPC.ClipboardDeleteItem, (_e, id: string) => deleteItem(id));
     ipcMain.handle(IPC.ClipboardClearAll, () => clearAll());
 
+    // Open image/file items in their macOS default handler (Preview for PNG,
+    // etc.). Text/bookmark items are ignored — openPath on non-file paths
+    // returns an error string and does nothing.
+    ipcMain.handle(IPC.ClipboardOpenItem, async (_e, id: string) => {
+        const item = findItem(id);
+        if (!item || (item.type !== "image" && item.type !== "file")) return;
+        const err = await shell.openPath(item.content);
+        if (err) console.error("[clipstack] openPath failed:", err);
+    });
+
     ipcMain.handle(IPC.SettingsGetHotkey, () => getHotkey());
     ipcMain.handle(IPC.SettingsSetHotkey, (_e, accelerator: string) => changeHotkey(accelerator));
 
@@ -160,6 +171,9 @@ export function registerIpcHandlers(): void {
     });
 
     ipcMain.handle(IPC.WindowHide, () => hideWindow());
+
+    ipcMain.handle(IPC.UpdatesGetStatus, () => getUpdateStatus());
+    ipcMain.handle(IPC.UpdatesInstall, () => installUpdate());
 }
 
 export function broadcastItemsUpdated(): void {

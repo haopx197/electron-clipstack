@@ -1,4 +1,4 @@
-export function IconPaintBoard({ color = "#141B34", ...props }) {
+export function IconPaintBoard({ color = "#000", ...props }) {
     return (
         <svg
             width="20"

@@ -1,14 +1,16 @@
 import type { MouseEvent } from "react";
 import styled, { css } from "styled-components";
+
 import type { ClipboardItem, ClipboardItemType } from "../../../shared/types";
 import { IconDelete, IconFolderFileStorage, IconImageCrop, IconPin, IconPinOff, IconTextCreation } from "../SVGs";
-import { Button } from "../components";
+import { Button, Flex } from "../components";
 
 type Props = {
     item: ClipboardItem;
     onPaste: (id: string) => void;
     onPin: (id: string) => void;
     onDelete: (id: string) => void;
+    onOpen: (id: string) => void;
 };
 
 function imageUrl(path: string): string {
@@ -66,41 +68,57 @@ function ItemBody({ item }: { item: ClipboardItem }) {
     }
 }
 
-export function ClipboardItemRow({ item, onPaste, onPin, onDelete }: Props) {
+export function ClipboardItemRow({ item, onPaste, onPin, onDelete, onOpen }: Props) {
     const handleClick = (): void => onPaste(item.id);
+    const canOpen = item.type === "image" || item.type === "file";
+    const openLabel = item.type === "image" ? "Preview image" : "Open file";
 
     return (
         <Item $pinned={item.pinned} onClick={handleClick} role="button" tabIndex={0}>
-            <TypeIconBox aria-hidden="true">
+            <TypeIconBox>
                 <TypeIcon type={item.type} />
             </TypeIconBox>
             <Body>
                 <ItemBody item={item} />
             </Body>
-            <Actions>
-                <Button
-                    variant="icon"
-                    title={item.pinned ? "Unpin" : "Pin"}
-                    onClick={(e) => {
-                        stop(e);
-                        onPin(item.id);
-                    }}
-                    aria-label={item.pinned ? "Unpin item" : "Pin item"}
-                >
-                    {item.pinned ? <IconPinOff color="var(--color-primary)" /> : <IconPin />}
-                </Button>
-                <Button
-                    variant="icon"
-                    title="Delete"
-                    onClick={(e) => {
-                        stop(e);
-                        onDelete(item.id);
-                    }}
-                    aria-label="Delete item"
-                >
-                    <IconDelete color="var(--color-error)" />
-                </Button>
-            </Actions>
+            <Flex direction="column" gap={4}>
+                {canOpen && (
+                    <Button
+                        title={openLabel}
+                        aria-label={openLabel}
+                        onClick={(e: MouseEvent) => {
+                            stop(e);
+                            onOpen(item.id);
+                        }}
+                    >
+                        {openLabel}
+                    </Button>
+                )}
+                <Actions>
+                    <Button
+                        variant="icon"
+                        title={item.pinned ? "Unpin" : "Pin"}
+                        onClick={(e) => {
+                            stop(e);
+                            onPin(item.id);
+                        }}
+                        aria-label={item.pinned ? "Unpin item" : "Pin item"}
+                    >
+                        {item.pinned ? <IconPinOff color="var(--color-primary)" /> : <IconPin />}
+                    </Button>
+                    <Button
+                        variant="icon"
+                        title="Delete"
+                        onClick={(e) => {
+                            stop(e);
+                            onDelete(item.id);
+                        }}
+                        aria-label="Delete item"
+                    >
+                        <IconDelete color="var(--color-error)" />
+                    </Button>
+                </Actions>
+            </Flex>
         </Item>
     );
 }
@@ -119,7 +137,6 @@ const ItemText = styled.div`
 const ItemImage = styled.img`
     max-width: 100%;
     max-height: 120px;
-    border: 1px solid var(--color-border);
     display: block;
     object-fit: contain;
 `;
@@ -167,12 +184,10 @@ const FilePath = styled.div`
 `;
 
 const TypeIconBox = styled.div`
-    flex-shrink: 0;
     color: var(--color-text);
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    margin-top: 1px;
 `;
 
 const Body = styled.div`
@@ -188,12 +203,15 @@ const Actions = styled.div`
 `;
 
 const Item = styled.div<{ $pinned: boolean }>`
-    position: relative;
     display: flex;
     align-items: center;
-    gap: 12px;
     padding: 12px;
+    gap: 12px;
     cursor: pointer;
+
+    &:hover {
+        background-color: #ebeef1;
+    }
 
     ${(p) =>
         p.$pinned &&

@@ -38,6 +38,10 @@ export function ClipboardTab() {
         setItems(next);
     }, []);
 
+    const handleOpen = useCallback(async (id: string) => {
+        await window.clipstack.openItem(id);
+    }, []);
+
     const handleClearAll = useCallback(async () => {
         const next = await window.clipstack.clearAll();
         setItems(next);
@@ -75,6 +79,7 @@ export function ClipboardTab() {
                             onPaste={handlePaste}
                             onPin={handlePin}
                             onDelete={handleDelete}
+                            onOpen={handleOpen}
                         />
                     ))
                 )}

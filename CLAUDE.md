@@ -127,6 +127,9 @@ const MAX_MAX_CLIPS = 200;
 | `system:accessibility-status`            | renderer → main (invoke)     | `()` → `boolean` (check-only, no native prompt)                        |
 | `system:open-accessibility-settings`     | renderer → main (invoke)     | `()` → opens System Settings → Privacy & Security → Accessibility      |
 | `system:relaunch`                        | renderer → main (invoke)     | `()` → `app.relaunch()` + `exit(0)` (no-op in dev)                     |
+| `updates:get-status`                     | renderer → main (invoke)     | `()` → `UpdateStatus` (`{ hasUpdate, notes }`)                         |
+| `updates:install`                        | renderer → main (invoke)     | `()` → download DMG, spawn detached installer, quit app                |
+| `updates:install-progress`               | main → renderer (push)       | `UpdateInstallProgress` (`{ phase, percent, error }`)                  |
 
 ## 5. Main process — module behaviour
 
@@ -243,6 +246,20 @@ ClipboardPasteItem(id):
 
 Image write path branches on SVG detection (`sniffUti` — first 2KB text scan for `<svg`). SVG becomes clipboard text (source); rasters use `clipboard.write({ image: nativeImage.createFromBuffer(bytes) })` which declares TIFF/PNG via NSPasteboard writeObjects. `writeBuffer("public.svg-image", ...)` was tried and silent-fails on macOS: Electron doesn't call `declareTypes:owner:` first → user pastes empty.
 
+### `updater.ts`
+
+Silent auto-update over GitHub Releases. No `electron-updater` — that library requires a code-signed bundle to verify updates, which we deliberately don't have (§7). Instead, we compare the git short SHA baked into the DMG at build time against a `latest.json` published as a release asset.
+
+- **Build SHA injection** — [`electron.vite.config.ts`](electron.vite.config.ts) runs `git rev-parse --short HEAD` at build time and injects it into the main bundle via Vite `define: { __BUILD_SHA__: ... }`. Falls back to `"dev"` outside a git checkout; dev builds skip the update check entirely so they never nag.
+- **Boot check** — [`main/index.ts`](src/main/index.ts) fires `void checkForUpdate()` once, no timer, no periodic polling. Fetches `https://github.com/haopx197/electron-clipstack/releases/latest/download/latest.json?t=<ts>` (cache-bust against GitHub's CDN). If `latestSha !== CURRENT_SHA`, sets `hasUpdate = true`. All errors swallowed silently — retry next boot.
+- **UI** — [`SettingsTab.tsx`](src/renderer/src/modules/SettingsTab.tsx) renders the "Update available" block only when `status.hasUpdate === true`. No manual "Check for updates" button — boot check is the only trigger. When there's no update, the section doesn't exist.
+- **Install flow** — `installUpdate()` downloads the arch-appropriate DMG (`process.arch === "arm64"` → `clipstack-arm64.dmg`, else `clipstack-x64.dmg`) to `userData/updates/ClipStack-update.dmg`, streaming progress via the `updates:install-progress` push channel (throttled to 100ms). Then writes a detached bash script to `/tmp/clipstack-installer-<ts>.sh` and `spawn`s it with `{ detached: true, stdio: "ignore" }` + `unref()`, and calls `app.quit()` after 300ms.
+- **The installer script** — hardcoded `PATH=/usr/bin:/bin:/usr/sbin:/sbin` because Electron apps launched from Finder inherit minimal PATH and would fail to find `hdiutil`, `xattr`, etc. Waits up to 30s (`kill -0 <pid>` loop) for the app to exit, then mirrors `install.sh`: `hdiutil attach` → `rm -rf /Applications/ClipStack.app` → `cp -R` → `xattr -cr` → `hdiutil detach` → `open -a ClipStack`. Log at `userData/updates/installer.log`.
+- **`app.isPackaged` gate** — `installUpdate()` no-ops in dev; nothing to swap in.
+- **`latest.json` shape** — `{ "sha": "abc1234", "notes": "..." }`. `notes` is optional plain text shown verbatim in the UI. Publishing new releases is done via `npm run release` (§7).
+
+Persistent state across updates: user data lives in `userData` (clip history JSON + `clip-images/`), which is untouched by the installer script — only `/Applications/ClipStack.app` is replaced. Accessibility permission usually needs to be re-granted since each unsigned build has a different ad-hoc signature (§8).
+
 ## 6. Renderer
 
 - **`App`** — `AppShell` with `DragHandle` (top drag strip), `AccessibilityBanner`, then `TabView`.
@@ -265,6 +282,41 @@ yarn build:mac          # → dist/clipstack-1.0.0-arm64.dmg + -x64.dmg
 
 - No signing, no notarization. `build:mac*` scripts run with `CSC_IDENTITY_AUTO_DISCOVERY=false` (or via install docs).
 - End-user install: `curl -fsSL https://.../install.sh | bash` — mounts DMG, copies to `/Applications`, runs `xattr -cr`.
+
+### Releasing (`npm run release`)
+
+Each release must upload four assets so both the first-time installer and the in-app updater keep working:
+
+| Asset                    | Consumed by                                                        |
+| ------------------------ | ------------------------------------------------------------------ |
+| `clipstack-arm64.dmg`    | `install.sh` (Apple Silicon), in-app updater on arm64              |
+| `clipstack-x64.dmg`      | `install.sh` (Intel), in-app updater on x64                        |
+| `install.sh`             | README `curl … | bash` one-liner (first install)                   |
+| `latest.json`            | in-app updater — `{ "sha": "<short-sha>", "notes": "..." }`        |
+
+Because all four are pulled from `https://github.com/haopx197/electron-clipstack/releases/latest/download/<name>`, only the newest release needs them — GitHub 404s that URL if the *latest* release is missing the asset, even if earlier releases had it.
+
+Workflow:
+
+```bash
+# one-time
+brew install gh && gh auth login
+
+# every release
+git commit -am "fix: ..."
+npm run build:mac                        # produces the two DMGs in dist/
+npm run release -- -n "Fix ..."          # generates latest.json + uploads all 4 files
+```
+
+[`scripts/release.sh`](scripts/release.sh) does:
+
+1. Reads `git rev-parse --short HEAD` → tag `build-<sha>` (matches `__BUILD_SHA__` baked into the DMG).
+2. Warns if the working tree is dirty (the DMG's baked SHA won't match `HEAD` in that case).
+3. Writes `dist/latest.json` with the SHA + notes (defaults to the last commit subject).
+4. Calls `gh release create --latest` and uploads the two DMGs + `install.sh` + `latest.json`.
+5. `--force` deletes an existing release with the same tag before re-uploading.
+
+After a successful release, users running an older build see "Update available" the next time they open the Settings tab (boot check, no polling).
 
 ### System requirements (users)
 

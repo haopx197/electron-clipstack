@@ -20,6 +20,7 @@
         "build:unpack": "npm run build && electron-builder --dir",
         "build:win": "npm run build && electron-builder --win",
         "build:mac": "npm run typecheck && npm run build:helper:universal && electron-vite build && electron-builder --mac",
+        "release": "bash scripts/release.sh",
         "build:mac:arm64": "npm run typecheck && npm run build:helper && electron-vite build && electron-builder --mac --arm64",
         "build:mac:x64": "npm run typecheck && npm run build:helper:universal && electron-vite build && electron-builder --mac --x64",
         "build:linux": "electron-vite build && electron-builder --linux"

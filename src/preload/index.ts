@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer, IpcRendererEvent } from "electron";
 import { IPC } from "../shared/ipc";
-import { ClipboardItem, SetHotkeyResult } from "../shared/types";
+import { ClipboardItem, SetHotkeyResult, UpdateInstallProgress, UpdateStatus } from "../shared/types";
 
 const clipstack = {
     getItems: (): Promise<ClipboardItem[]> => ipcRenderer.invoke(IPC.ClipboardGetItems),
@@ -8,6 +8,7 @@ const clipstack = {
     pinItem: (id: string): Promise<ClipboardItem[]> => ipcRenderer.invoke(IPC.ClipboardPinItem, id),
     deleteItem: (id: string): Promise<ClipboardItem[]> => ipcRenderer.invoke(IPC.ClipboardDeleteItem, id),
     clearAll: (): Promise<ClipboardItem[]> => ipcRenderer.invoke(IPC.ClipboardClearAll),
+    openItem: (id: string): Promise<void> => ipcRenderer.invoke(IPC.ClipboardOpenItem, id),
 
     getHotkey: (): Promise<string> => ipcRenderer.invoke(IPC.SettingsGetHotkey),
     setHotkey: (accelerator: string): Promise<SetHotkeyResult> =>
@@ -28,6 +29,14 @@ const clipstack = {
     openAccessibilitySettings: (): Promise<void> =>
         ipcRenderer.invoke(IPC.SystemOpenAccessibilitySettings),
     relaunch: (): Promise<void> => ipcRenderer.invoke(IPC.SystemRelaunch),
+
+    getUpdateStatus: (): Promise<UpdateStatus> => ipcRenderer.invoke(IPC.UpdatesGetStatus),
+    installUpdate: (): Promise<void> => ipcRenderer.invoke(IPC.UpdatesInstall),
+    onUpdateInstallProgress: (cb: (p: UpdateInstallProgress) => void): (() => void) => {
+        const listener = (_e: IpcRendererEvent, p: UpdateInstallProgress): void => cb(p);
+        ipcRenderer.on(IPC.UpdatesInstallProgress, listener);
+        return () => ipcRenderer.removeListener(IPC.UpdatesInstallProgress, listener);
+    },
 
     onItemsUpdated: (cb: (items: ClipboardItem[]) => void): (() => void) => {
         const listener = (_e: IpcRendererEvent, items: ClipboardItem[]): void => cb(items);

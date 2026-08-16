@@ -1,4 +1,4 @@
-export function IconSelect({ color = "#141B34", ...props }) {
+export function IconSelect({ color = "#000", ...props }) {
     return (
         <svg
             width="20"

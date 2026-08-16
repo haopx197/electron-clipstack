@@ -45,6 +45,38 @@ dist/clipstack-1.0.0-x64.dmg      # Intel
 
 The Swift helper is a universal binary (arm64 + x64 slices via `lipo`), shipped in `resources/ClipStackHelper` and packed into `asarUnpack` so it stays executable at runtime.
 
+## Releasing updates
+
+ClipStack has a built-in silent updater. On launch it fetches `latest.json` from the GitHub Release, and if the embedded git SHA differs from the running build, an "Update available" section appears in Settings. Clicking **Install update** downloads the DMG, spawns a detached shell installer, quits the app, replaces `/Applications/ClipStack.app`, strips quarantine, and relaunches.
+
+For this to work, each release must ship four files together:
+
+- `clipstack-arm64.dmg` — Apple Silicon build
+- `clipstack-x64.dmg` — Intel build
+- `install.sh` — first-time installer referenced by the README's `curl` one-liner
+- `latest.json` — `{ "sha": "abc1234", "notes": "..." }` consumed by the in-app updater
+
+The `sha` must match `git rev-parse --short HEAD` at the commit used for the build (the same value is baked into the DMG via `__BUILD_SHA__`). GitHub only serves `releases/latest/download/<name>` from the newest release, so every release must include all four assets.
+
+### One-time setup
+
+```bash
+brew install gh
+gh auth login
+```
+
+### Every release
+
+```bash
+git commit -am "fix: something"
+npm run build:mac                        # produces the two DMGs in dist/
+npm run release -- -n "Fix something"    # generates latest.json + uploads all 3 files
+```
+
+`npm run release` runs [`scripts/release.sh`](scripts/release.sh) which tags `build-<sha>`, marks the release as latest, and uploads the DMGs + `latest.json` via `gh`. Omit `-n "..."` to use the last commit subject as release notes. Pass `--force` to overwrite an existing release with the same SHA.
+
+Users running an older build see the update banner the next time they open the Settings tab (boot-time check, no polling).
+
 ## Signing and distribution
 
 Builds are **unsigned** by default (`CSC_IDENTITY_AUTO_DISCOVERY=false` in `build:mac` scripts). This is intentional — no Apple Developer account needed. The install script (`scripts/install.sh`) mounts the DMG, copies `ClipStack.app` to `/Applications`, and runs `xattr -cr` to strip quarantine before first launch.

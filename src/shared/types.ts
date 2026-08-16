@@ -32,6 +32,20 @@ export type SetHotkeyResult = {
     error?: string;
 };
 
+export type UpdateStatus = {
+    hasUpdate: boolean;
+    notes: string | null;
+};
+
+export type UpdateInstallPhase = "idle" | "downloading" | "installing" | "error";
+
+export type UpdateInstallProgress = {
+    phase: UpdateInstallPhase;
+    /** 0..1 while phase === "downloading". */
+    percent: number;
+    error: string | null;
+};
+
 export const DEFAULT_HOTKEY = "Command+Shift+V";
 export const DEFAULT_WINDOW_SIZE = { width: 400, height: 500 };
 export const DEFAULT_MAX_CLIPS = 50;

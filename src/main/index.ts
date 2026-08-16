@@ -9,6 +9,7 @@ import { registerIpcHandlers, broadcastItemsUpdated } from "./ipcHandlers";
 import { startClipboardWatcher, stopClipboardWatcher } from "./clipboardWatcher";
 import { startHelper } from "./helper";
 import { getCaptureToClipboard } from "./store";
+import { checkForUpdate } from "./updater";
 
 // Custom scheme for clipboard image thumbnails. MUST run BEFORE app.whenReady().
 protocol.registerSchemesAsPrivileged([
@@ -82,6 +83,10 @@ app.whenReady().then(() => {
     startClipboardWatcher(() => {
         broadcastItemsUpdated();
     });
+
+    // Boot-time update check. Fire-and-forget: no timer, no periodic polling —
+    // subsequent checks are user-initiated from the Settings tab.
+    void checkForUpdate();
 });
 
 app.on("will-quit", () => {

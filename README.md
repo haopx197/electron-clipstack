@@ -47,35 +47,56 @@ The Swift helper is a universal binary (arm64 + x64 slices via `lipo`), shipped 
 
 ## Releasing updates
 
-ClipStack has a built-in silent updater. On launch it fetches `latest.json` from the GitHub Release, and if the embedded git SHA differs from the running build, an "Update available" section appears in Settings. Clicking **Install update** downloads the DMG, spawns a detached shell installer, quits the app, replaces `/Applications/ClipStack.app`, strips quarantine, and relaunches.
+ClipStack has a built-in silent updater. On launch it fetches `latest.json` from the GitHub Release, and if the embedded git SHA differs from the running build, an "Update available" banner appears above the tab bar. Clicking **Install** downloads the DMG, spawns a detached shell installer, quits the app, replaces `/Applications/ClipStack.app`, strips quarantine, and relaunches.
 
-For this to work, each release must ship four files together:
+Each release must ship four assets together:
 
 - `clipstack-arm64.dmg` — Apple Silicon build
 - `clipstack-x64.dmg` — Intel build
 - `install.sh` — first-time installer referenced by the README's `curl` one-liner
 - `latest.json` — `{ "sha": "abc1234", "notes": "..." }` consumed by the in-app updater
 
-The `sha` must match `git rev-parse --short HEAD` at the commit used for the build (the same value is baked into the DMG via `__BUILD_SHA__`). GitHub only serves `releases/latest/download/<name>` from the newest release, so every release must include all four assets.
+The `sha` in `latest.json` must match `git rev-parse --short HEAD` at the commit used for the build — the same value is baked into the DMG via `__BUILD_SHA__`. GitHub only serves `releases/latest/download/<name>` from the newest release, so every release must include all four assets.
 
-### One-time setup
+### Publishing a new release (manual)
 
-```bash
-brew install gh
-gh auth login
-```
+1. Commit changes on the branch you want to ship from:
 
-### Every release
+    ```bash
+    git commit -am "Fix something"
+    ```
 
-```bash
-git commit -am "fix: something"
-npm run build:mac                        # produces the two DMGs in dist/
-npm run release -- -n "Fix something"    # generates latest.json + uploads all 3 files
-```
+2. Build the DMGs:
 
-`npm run release` runs [`scripts/release.sh`](scripts/release.sh) which tags `build-<sha>`, marks the release as latest, and uploads the DMGs + `latest.json` via `gh`. Omit `-n "..."` to use the last commit subject as release notes. Pass `--force` to overwrite an existing release with the same SHA.
+    ```bash
+    npm run build:mac
+    ```
 
-Users running an older build see the update banner the next time they open the Settings tab (boot-time check, no polling).
+    Outputs `dist/clipstack-arm64.dmg` and `dist/clipstack-x64.dmg`.
+
+3. Generate `latest.json` with the current SHA and release notes:
+
+    ```bash
+    printf '{"sha":"%s","notes":"%s"}\n' \
+        "$(git rev-parse --short HEAD)" \
+        "Fix something" \
+        > dist/latest.json
+    ```
+
+4. Open <https://github.com/haopx197/electron-clipstack/releases> and click **Draft a new release**:
+
+    - **Tag**: `build-<sha>` (e.g. `build-074ae94`) — create a new tag on publish.
+    - **Title**: anything (`ClipStack build-074ae94` is fine).
+    - **Notes**: whatever you want users to read.
+    - **Attach binaries**: drag & drop all four files:
+        - `dist/clipstack-arm64.dmg`
+        - `dist/clipstack-x64.dmg`
+        - `dist/latest.json`
+        - `scripts/install.sh`
+    - Check **Set as the latest release** (important — the in-app updater and the `curl … | bash` installer both read `releases/latest/download/…`).
+    - Click **Publish release**.
+
+Users running an older build see the update banner the next time they open the app (boot-time check, no polling).
 
 ## Signing and distribution
 

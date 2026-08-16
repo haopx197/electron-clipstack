@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
 import styled from "styled-components";
 import type { UpdateInstallProgress, UpdateStatus } from "../../../shared/types";
-import { Button } from "./Button";
-import { Typography } from "./Typography";
+import { Button, Typography } from "../components";
 
 // Informational strip shown when the boot-time updater found a newer release.
 // Non-blocking: dismissing is not required. Nothing renders until hasUpdate flips true.
@@ -21,32 +20,40 @@ export function UpdateBanner() {
 
     if (!status.hasUpdate) return null;
 
-    const busy = install.phase === "downloading" || install.phase === "installing";
+    const { phase, percent, error } = install;
+    const busy = phase === "downloading" || phase === "installing";
+    const title =
+        phase === "downloading"
+            ? `Downloading update… ${Math.round(percent * 100)}%`
+            : phase === "installing"
+              ? "Installing update…"
+              : phase === "error"
+                ? "Update failed"
+                : "Update available";
+    const subtitle =
+        phase === "installing"
+            ? "ClipStack will restart in a few seconds…"
+            : phase === "error" && error
+              ? error
+              : status.notes || "A newer version of ClipStack is ready.";
 
     return (
         <Wrap role="status">
-            <ProgressFill $percent={install.phase === "downloading" ? install.percent : 0} />
+            <ProgressFill $percent={phase === "downloading" ? percent : 0} />
             <Content>
                 <TextCol>
                     <Typography size={12} weight="medium" color="var(--color-text-strong)">
-                        {install.phase === "downloading" && `Downloading update… ${Math.round(install.percent * 100)}%`}
-                        {install.phase === "installing" && "Installing update…"}
-                        {install.phase === "error" && "Update failed"}
-                        {(install.phase === "idle" || install.phase === "error") && "Update available"}
+                        {title}
                     </Typography>
                     <Subtitle>
-                        <Typography size={11} color="var(--color-text-strong)">
-                            {install.phase === "installing"
-                                ? "ClipStack will restart shortly."
-                                : install.phase === "error" && install.error
-                                  ? install.error
-                                  : status.notes || "A newer version of ClipStack is ready."}
+                        <Typography size={12} color="var(--color-text-strong)">
+                            {subtitle}
                         </Typography>
                     </Subtitle>
                 </TextCol>
                 {!busy && (
                     <Button onClick={() => window.clipstack.installUpdate()}>
-                        {install.phase === "error" ? "Retry" : "Install"}
+                        {phase === "error" ? "Retry" : "Install"}
                     </Button>
                 )}
             </Content>
@@ -89,7 +96,6 @@ const TextCol = styled.div`
 `;
 
 const Subtitle = styled.div`
-    opacity: 0.75;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

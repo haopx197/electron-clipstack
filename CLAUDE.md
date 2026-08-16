@@ -256,7 +256,7 @@ Silent auto-update over GitHub Releases. No `electron-updater` — that library 
 - **Install flow** — `installUpdate()` downloads the arch-appropriate DMG (`process.arch === "arm64"` → `clipstack-arm64.dmg`, else `clipstack-x64.dmg`) to `userData/updates/ClipStack-update.dmg`, streaming progress via the `updates:install-progress` push channel (throttled to 100ms). Then writes a detached bash script to `/tmp/clipstack-installer-<ts>.sh` and `spawn`s it with `{ detached: true, stdio: "ignore" }` + `unref()`, and calls `app.quit()` after 300ms.
 - **The installer script** — hardcoded `PATH=/usr/bin:/bin:/usr/sbin:/sbin` because Electron apps launched from Finder inherit minimal PATH and would fail to find `hdiutil`, `xattr`, etc. Waits up to 30s (`kill -0 <pid>` loop) for the app to exit, then mirrors `install.sh`: `hdiutil attach` → `rm -rf /Applications/ClipStack.app` → `cp -R` → `xattr -cr` → `hdiutil detach` → `open -a ClipStack`. Log at `userData/updates/installer.log`.
 - **`app.isPackaged` gate** — `installUpdate()` no-ops in dev; nothing to swap in.
-- **`latest.json` shape** — `{ "sha": "abc1234", "notes": "..." }`. `notes` is optional plain text shown verbatim in the UI. Publishing new releases is done via `npm run release` (§7).
+- **`latest.json` shape** — `{ "sha": "abc1234", "notes": "..." }`. `notes` is optional plain text shown verbatim in the UI. See §7 for the manual release workflow.
 
 Persistent state across updates: user data lives in `userData` (clip history JSON + `clip-images/`), which is untouched by the installer script — only `/Applications/ClipStack.app` is replaced. Accessibility permission usually needs to be re-granted since each unsigned build has a different ad-hoc signature (§8).
 
@@ -283,7 +283,7 @@ yarn build:mac          # → dist/clipstack-1.0.0-arm64.dmg + -x64.dmg
 - No signing, no notarization. `build:mac*` scripts run with `CSC_IDENTITY_AUTO_DISCOVERY=false` (or via install docs).
 - End-user install: `curl -fsSL https://.../install.sh | bash` — mounts DMG, copies to `/Applications`, runs `xattr -cr`.
 
-### Releasing (`npm run release`)
+### Releasing (manual)
 
 Each release must upload four assets so both the first-time installer and the in-app updater keep working:
 
@@ -294,29 +294,23 @@ Each release must upload four assets so both the first-time installer and the in
 | `install.sh`             | README `curl … | bash` one-liner (first install)                   |
 | `latest.json`            | in-app updater — `{ "sha": "<short-sha>", "notes": "..." }`        |
 
-Because all four are pulled from `https://github.com/haopx197/electron-clipstack/releases/latest/download/<name>`, only the newest release needs them — GitHub 404s that URL if the *latest* release is missing the asset, even if earlier releases had it.
+All four are pulled from `https://github.com/haopx197/electron-clipstack/releases/latest/download/<name>`. GitHub 404s that URL when the *latest* release is missing an asset — even if an earlier release had it — so every release must include all four.
+
+The `sha` in `latest.json` must equal `git rev-parse --short HEAD` at the commit built. That value is what electron-vite bakes into the main bundle as `__BUILD_SHA__`; if they diverge, the updater compares stale values and either shows a phantom update or misses a real one.
 
 Workflow:
 
 ```bash
-# one-time
-brew install gh && gh auth login
-
-# every release
-git commit -am "fix: ..."
-npm run build:mac                        # produces the two DMGs in dist/
-npm run release -- -n "Fix ..."          # generates latest.json + uploads all 4 files
+git commit -am "Fix ..."
+npm run build:mac
+printf '{"sha":"%s","notes":"%s"}\n' "$(git rev-parse --short HEAD)" "Fix ..." > dist/latest.json
 ```
 
-[`scripts/release.sh`](scripts/release.sh) does:
+Then open <https://github.com/haopx197/electron-clipstack/releases>, draft a new release with tag `build-<sha>`, drag in the two DMGs from `dist/`, `dist/latest.json`, and `scripts/install.sh`, tick **Set as the latest release**, and publish.
 
-1. Reads `git rev-parse --short HEAD` → tag `build-<sha>` (matches `__BUILD_SHA__` baked into the DMG).
-2. Warns if the working tree is dirty (the DMG's baked SHA won't match `HEAD` in that case).
-3. Writes `dist/latest.json` with the SHA + notes (defaults to the last commit subject).
-4. Calls `gh release create --latest` and uploads the two DMGs + `install.sh` + `latest.json`.
-5. `--force` deletes an existing release with the same tag before re-uploading.
+Pushing the commit to the remote is *not* required for the updater to work — the release assets are what matter. But push anyway so the tag on GitHub points to a real commit.
 
-After a successful release, users running an older build see "Update available" the next time they open the Settings tab (boot check, no polling).
+After publish, users running an older build see the "Update available" banner (below `DragHandle`, above `AccessibilityBanner`) the next time they open the app.
 
 ### System requirements (users)
 

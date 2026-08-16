@@ -143,7 +143,8 @@ export async function installUpdate(): Promise<void> {
         const child = spawn("/bin/bash", [scriptPath], { detached: true, stdio: "ignore" });
         child.unref();
 
-        setTimeout(() => app.quit(), 300);
+        // Give the user a beat to read "Installing update…" before the window disappears.
+        setTimeout(() => app.quit(), 2500);
     } catch (e) {
         installing = false;
         emitInstallProgress({

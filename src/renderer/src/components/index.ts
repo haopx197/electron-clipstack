@@ -4,8 +4,6 @@ export * from "./Typography";
 export * from "./Flex";
 export * from "./Input";
 export * from "./Empty";
-export * from "./AccessibilityBanner";
-export * from "./UpdateBanner";
 export * from "./DragHandle";
 export * from "./Switch";
 export * from "./SettingToggle";

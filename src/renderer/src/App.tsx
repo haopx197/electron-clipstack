@@ -1,14 +1,14 @@
 import styled from "styled-components";
 
-import { AccessibilityBanner, DragHandle, UpdateBanner } from "./components";
-import { TabView } from "./modules";
+import { DragHandle } from "./components";
+import { TabView, UpdateBanner, AccessibilityBanner } from "./modules";
 
 function App() {
     return (
         <AppShell>
             <DragHandle />
-            <UpdateBanner />
             <AccessibilityBanner />
+            <UpdateBanner />
             <TabView />
         </AppShell>
     );

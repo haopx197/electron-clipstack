@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import styled from "styled-components";
-import { Button } from "./Button";
-import { Typography } from "./Typography";
+
+import { Button, Typography } from "../components";
 
 // Warning banner when Accessibility permission is missing. Non-blocking:
 // clipboard history still works, only auto-Cmd+V is disabled.

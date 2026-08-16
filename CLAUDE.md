@@ -127,8 +127,9 @@ const MAX_MAX_CLIPS = 200;
 | `system:accessibility-status`            | renderer → main (invoke)     | `()` → `boolean` (check-only, no native prompt)                        |
 | `system:open-accessibility-settings`     | renderer → main (invoke)     | `()` → opens System Settings → Privacy & Security → Accessibility      |
 | `system:relaunch`                        | renderer → main (invoke)     | `()` → `app.relaunch()` + `exit(0)` (no-op in dev)                     |
-| `updates:get-status`                     | renderer → main (invoke)     | `()` → `UpdateStatus` (`{ hasUpdate, notes }`)                         |
+| `updates:get-status`                     | renderer → main (invoke)     | `()` → `UpdateStatus` (`{ hasUpdate }`)                                |
 | `updates:install`                        | renderer → main (invoke)     | `()` → download DMG, spawn detached installer, quit app                |
+| `updates:status-updated`                 | main → renderer (push)       | `UpdateStatus` — fires when the boot-time check finishes                |
 | `updates:install-progress`               | main → renderer (push)       | `UpdateInstallProgress` (`{ phase, percent, error }`)                  |
 
 ## 5. Main process — module behaviour
@@ -252,11 +253,12 @@ Silent auto-update over GitHub Releases. No `electron-updater` — that library 
 
 - **Build SHA injection** — [`electron.vite.config.ts`](electron.vite.config.ts) runs `git rev-parse --short HEAD` at build time and injects it into the main bundle via Vite `define: { __BUILD_SHA__: ... }`. Falls back to `"dev"` outside a git checkout; dev builds skip the update check entirely so they never nag.
 - **Boot check** — [`main/index.ts`](src/main/index.ts) fires `void checkForUpdate()` once, no timer, no periodic polling. Fetches `https://github.com/haopx197/electron-clipstack/releases/latest/download/latest.json?t=<ts>` (cache-bust against GitHub's CDN). If `latestSha !== CURRENT_SHA`, sets `hasUpdate = true`. All errors swallowed silently — retry next boot.
-- **UI** — [`UpdateBanner.tsx`](src/renderer/src/components/UpdateBanner.tsx) sits directly below `DragHandle`, above `AccessibilityBanner`. Renders nothing until `status.hasUpdate === true`. During download it overlays a semi-transparent progress fill on its own background instead of a separate progress bar. No manual "Check for updates" trigger — boot check is the only path in.
+- **UI** — [`UpdateBanner.tsx`](src/renderer/src/modules/UpdateBanner.tsx) sits below `DragHandle` and below `AccessibilityBanner`. Renders nothing until `status.hasUpdate === true`. During download it overlays a semi-transparent progress fill on its own background instead of a separate progress bar; the fill stays at 100% through the `installing` phase so it doesn't snap back to empty before the app quits. No manual "Check for updates" trigger — boot check is the only path in.
+- **Renderer race on first launch** — the banner subscribes to `updates:status-updated` in addition to its one-shot `getUpdateStatus()` call. `checkForUpdate()` pushes the final status when the fetch finishes, so a window that mounted before the fetch completed (slow network, first launch) still gets the "Update available" state the moment it lands.
 - **Install flow** — `installUpdate()` downloads the arch-appropriate DMG (`process.arch === "arm64"` → `clipstack-arm64.dmg`, else `clipstack-x64.dmg`) to `userData/updates/ClipStack-update.dmg`, streaming progress via the `updates:install-progress` push channel (throttled to 100ms). Then writes a detached bash script to `/tmp/clipstack-installer-<ts>.sh` and `spawn`s it with `{ detached: true, stdio: "ignore" }` + `unref()`, and calls `app.quit()` after 300ms.
-- **The installer script** — hardcoded `PATH=/usr/bin:/bin:/usr/sbin:/sbin` because Electron apps launched from Finder inherit minimal PATH and would fail to find `hdiutil`, `xattr`, etc. Waits up to 30s (`kill -0 <pid>` loop) for the app to exit, then mirrors `install.sh`: `hdiutil attach` → `rm -rf /Applications/ClipStack.app` → `cp -R` → `xattr -cr` → `hdiutil detach` → `open -a ClipStack`. Log at `userData/updates/installer.log`.
+- **The installer script** — hardcoded `PATH=/usr/bin:/bin:/usr/sbin:/sbin` because Electron apps launched from Finder inherit minimal PATH and would fail to find `hdiutil`, `xattr`, etc. Waits up to 30s (`kill -0 <pid>` loop) for the app to exit, then mirrors `install.sh`: `hdiutil attach` → `rm -rf /Applications/ClipStack.app` → `cp -R` → `xattr -cr` → `hdiutil detach` → `open /Applications/ClipStack.app`. Absolute path (not `open -a ClipStack`) so Launch Services can't route to a stale bundle if the user has multiple copies. Log at `userData/updates/installer.log`.
 - **`app.isPackaged` gate** — `installUpdate()` no-ops in dev; nothing to swap in.
-- **`latest.json` shape** — `{ "sha": "abc1234", "notes": "..." }`. `notes` is optional plain text shown verbatim in the UI. See §7 for the manual release workflow.
+- **`latest.json` shape** — `{ "sha": "abc1234" }`. Auto-generated at the end of `npm run build:mac` by [`scripts/gen-latest-json.sh`](scripts/gen-latest-json.sh) so the SHA can never drift from the DMG's `__BUILD_SHA__`. Release notes for GitHub are typed into the release form itself; the in-app banner shows a static "A newer version of ClipStack is ready." — no per-release copy.
 
 Persistent state across updates: user data lives in `userData` (clip history JSON + `clip-images/`), which is untouched by the installer script — only `/Applications/ClipStack.app` is replaced. Accessibility permission usually needs to be re-granted since each unsigned build has a different ad-hoc signature (§8).
 
@@ -292,25 +294,24 @@ Each release must upload four assets so both the first-time installer and the in
 | `clipstack-arm64.dmg`    | `install.sh` (Apple Silicon), in-app updater on arm64              |
 | `clipstack-x64.dmg`      | `install.sh` (Intel), in-app updater on x64                        |
 | `install.sh`             | README `curl … | bash` one-liner (first install)                   |
-| `latest.json`            | in-app updater — `{ "sha": "<short-sha>", "notes": "..." }`        |
+| `latest.json`            | in-app updater — `{ "sha": "<short-sha>" }`                        |
 
 All four are pulled from `https://github.com/haopx197/electron-clipstack/releases/latest/download/<name>`. GitHub 404s that URL when the *latest* release is missing an asset — even if an earlier release had it — so every release must include all four.
 
-The `sha` in `latest.json` must equal `git rev-parse --short HEAD` at the commit built. That value is what electron-vite bakes into the main bundle as `__BUILD_SHA__`; if they diverge, the updater compares stale values and either shows a phantom update or misses a real one.
+The `sha` in `latest.json` must equal `git rev-parse --short HEAD` at the commit built. That value is what electron-vite bakes into the main bundle as `__BUILD_SHA__`; if they diverge, the updater compares stale values and either shows a phantom update or misses a real one. `npm run build:mac` runs [`scripts/gen-latest-json.sh`](scripts/gen-latest-json.sh) at the end using the exact same `git rev-parse` invocation, so the two are always in sync — no manual editing.
 
 Workflow:
 
 ```bash
 git commit -am "Fix ..."
 npm run build:mac
-printf '{"sha":"%s","notes":"%s"}\n' "$(git rev-parse --short HEAD)" "Fix ..." > dist/latest.json
 ```
 
 Then open <https://github.com/haopx197/electron-clipstack/releases>, draft a new release with tag `build-<sha>`, drag in the two DMGs from `dist/`, `dist/latest.json`, and `scripts/install.sh`, tick **Set as the latest release**, and publish.
 
 Pushing the commit to the remote is *not* required for the updater to work — the release assets are what matter. But push anyway so the tag on GitHub points to a real commit.
 
-After publish, users running an older build see the "Update available" banner (below `DragHandle`, above `AccessibilityBanner`) the next time they open the app.
+After publish, users running an older build see the "Update available" banner (below `DragHandle`, below `AccessibilityBanner`) the next time they open the app.
 
 ### System requirements (users)
 

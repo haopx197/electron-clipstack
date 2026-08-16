@@ -84,8 +84,9 @@ app.whenReady().then(() => {
         broadcastItemsUpdated();
     });
 
-    // Boot-time update check. Fire-and-forget: no timer, no periodic polling —
-    // subsequent checks are user-initiated from the Settings tab.
+    // Boot-time update check. Fire-and-forget: no timer, no periodic polling,
+    // no manual re-check. On completion the result is pushed to the renderer
+    // (`UpdatesStatusUpdated`) in case the window mounted before it finished.
     void checkForUpdate();
 });
 

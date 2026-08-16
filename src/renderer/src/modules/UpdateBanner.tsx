@@ -6,7 +6,7 @@ import { Button, Typography } from "../components";
 // Informational strip shown when the boot-time updater found a newer release.
 // Non-blocking: dismissing is not required. Nothing renders until hasUpdate flips true.
 export function UpdateBanner() {
-    const [status, setStatus] = useState<UpdateStatus>({ hasUpdate: false, notes: null });
+    const [status, setStatus] = useState<UpdateStatus>({ hasUpdate: false });
     const [install, setInstall] = useState<UpdateInstallProgress>({
         phase: "idle",
         percent: 0,
@@ -15,7 +15,12 @@ export function UpdateBanner() {
 
     useEffect(() => {
         void window.clipstack.getUpdateStatus().then(setStatus);
-        return window.clipstack.onUpdateInstallProgress(setInstall);
+        const offStatus = window.clipstack.onUpdateStatus(setStatus);
+        const offProgress = window.clipstack.onUpdateInstallProgress(setInstall);
+        return () => {
+            offStatus();
+            offProgress();
+        };
     }, []);
 
     if (!status.hasUpdate) return null;
@@ -35,11 +40,15 @@ export function UpdateBanner() {
             ? "ClipStack will restart in a few seconds…"
             : phase === "error" && error
               ? error
-              : status.notes || "A newer version of ClipStack is ready.";
+              : "A newer version of ClipStack is ready.";
+
+    // Fill stays at the last percent through the `installing` phase so the strip
+    // doesn't snap back to empty during the brief window before the app quits.
+    const fillPercent = phase === "downloading" ? percent : phase === "installing" ? 1 : 0;
 
     return (
         <Wrap role="status">
-            <ProgressFill $percent={phase === "downloading" ? percent : 0} />
+            <ProgressFill $percent={fillPercent} />
             <Content>
                 <TextCol>
                     <Typography size={12} weight="medium" color="var(--color-text-strong)">

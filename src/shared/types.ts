@@ -34,7 +34,6 @@ export type SetHotkeyResult = {
 
 export type UpdateStatus = {
     hasUpdate: boolean;
-    notes: string | null;
 };
 
 export type UpdateInstallPhase = "idle" | "downloading" | "installing" | "error";

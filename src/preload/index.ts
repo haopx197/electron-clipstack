@@ -32,6 +32,11 @@ const clipstack = {
 
     getUpdateStatus: (): Promise<UpdateStatus> => ipcRenderer.invoke(IPC.UpdatesGetStatus),
     installUpdate: (): Promise<void> => ipcRenderer.invoke(IPC.UpdatesInstall),
+    onUpdateStatus: (cb: (s: UpdateStatus) => void): (() => void) => {
+        const listener = (_e: IpcRendererEvent, s: UpdateStatus): void => cb(s);
+        ipcRenderer.on(IPC.UpdatesStatusUpdated, listener);
+        return () => ipcRenderer.removeListener(IPC.UpdatesStatusUpdated, listener);
+    },
     onUpdateInstallProgress: (cb: (p: UpdateInstallProgress) => void): (() => void) => {
         const listener = (_e: IpcRendererEvent, p: UpdateInstallProgress): void => cb(p);
         ipcRenderer.on(IPC.UpdatesInstallProgress, listener);

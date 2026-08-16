@@ -54,7 +54,7 @@ Each release must ship four assets together:
 - `clipstack-arm64.dmg` — Apple Silicon build
 - `clipstack-x64.dmg` — Intel build
 - `install.sh` — first-time installer referenced by the README's `curl` one-liner
-- `latest.json` — `{ "sha": "abc1234", "notes": "..." }` consumed by the in-app updater
+- `latest.json` — `{ "sha": "abc1234" }` consumed by the in-app updater
 
 The `sha` in `latest.json` must match `git rev-parse --short HEAD` at the commit used for the build — the same value is baked into the DMG via `__BUILD_SHA__`. GitHub only serves `releases/latest/download/<name>` from the newest release, so every release must include all four assets.
 
@@ -66,28 +66,19 @@ The `sha` in `latest.json` must match `git rev-parse --short HEAD` at the commit
     git commit -am "Fix something"
     ```
 
-2. Build the DMGs:
+2. Build:
 
     ```bash
     npm run build:mac
     ```
 
-    Outputs `dist/clipstack-arm64.dmg` and `dist/clipstack-x64.dmg`.
+    Outputs into `dist/`: `clipstack-arm64.dmg`, `clipstack-x64.dmg`, and `latest.json` (auto-generated with the current git short SHA via [`scripts/gen-latest-json.sh`](scripts/gen-latest-json.sh)).
 
-3. Generate `latest.json` with the current SHA and release notes:
-
-    ```bash
-    printf '{"sha":"%s","notes":"%s"}\n' \
-        "$(git rev-parse --short HEAD)" \
-        "Fix something" \
-        > dist/latest.json
-    ```
-
-4. Open <https://github.com/haopx197/electron-clipstack/releases> and click **Draft a new release**:
+3. Open <https://github.com/haopx197/electron-clipstack/releases> and click **Draft a new release**:
 
     - **Tag**: `build-<sha>` (e.g. `build-074ae94`) — create a new tag on publish.
     - **Title**: anything (`ClipStack build-074ae94` is fine).
-    - **Notes**: whatever you want users to read.
+    - **Release notes**: whatever you want users to read on GitHub. The in-app updater doesn't display them.
     - **Attach binaries**: drag & drop all four files:
         - `dist/clipstack-arm64.dmg`
         - `dist/clipstack-x64.dmg`

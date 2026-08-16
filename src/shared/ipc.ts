@@ -18,6 +18,7 @@ export const IPC = {
     SystemRelaunch: "system:relaunch",
     UpdatesGetStatus: "updates:get-status",
     UpdatesInstall: "updates:install",
+    UpdatesStatusUpdated: "updates:status-updated",
     UpdatesInstallProgress: "updates:install-progress"
 } as const;
 

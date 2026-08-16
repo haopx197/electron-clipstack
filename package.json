@@ -19,9 +19,9 @@
         "postinstall": "bash scripts/fix-electron.sh && electron-builder install-app-deps",
         "build:unpack": "npm run build && electron-builder --dir",
         "build:win": "npm run build && electron-builder --win",
-        "build:mac": "npm run typecheck && npm run build:helper:universal && electron-vite build && electron-builder --mac",
-        "build:mac:arm64": "npm run typecheck && npm run build:helper && electron-vite build && electron-builder --mac --arm64",
-        "build:mac:x64": "npm run typecheck && npm run build:helper:universal && electron-vite build && electron-builder --mac --x64",
+        "build:mac": "npm run typecheck && npm run build:helper:universal && electron-vite build && electron-builder --mac && bash scripts/gen-latest-json.sh",
+        "build:mac:arm64": "npm run typecheck && npm run build:helper && electron-vite build && electron-builder --mac --arm64 && bash scripts/gen-latest-json.sh",
+        "build:mac:x64": "npm run typecheck && npm run build:helper:universal && electron-vite build && electron-builder --mac --x64 && bash scripts/gen-latest-json.sh",
         "build:linux": "electron-vite build && electron-builder --linux"
     },
     "dependencies": {

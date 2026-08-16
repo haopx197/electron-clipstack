@@ -13,7 +13,7 @@ const REPO_SLUG = "haopx197/electron-clipstack";
 const APP_NAME = "ClipStack";
 
 // latest.json is published as a release asset alongside the DMGs:
-//   { "sha": "abc1234", "notes": "optional release notes" }
+//   { "sha": "abc1234" }
 const LATEST_JSON_URL = `https://github.com/${REPO_SLUG}/releases/latest/download/latest.json`;
 
 function dmgUrl(): string {
@@ -23,7 +23,7 @@ function dmgUrl(): string {
 
 const CURRENT_SHA = typeof __BUILD_SHA__ === "string" ? __BUILD_SHA__ : "dev";
 
-let status: UpdateStatus = { hasUpdate: false, notes: null };
+let status: UpdateStatus = { hasUpdate: false };
 let installing = false;
 
 export function getUpdateStatus(): UpdateStatus {
@@ -36,11 +36,16 @@ export async function checkForUpdate(): Promise<void> {
     try {
         const res = await net.fetch(`${LATEST_JSON_URL}?t=${Date.now()}`, { redirect: "follow" });
         if (!res.ok) return;
-        const body = (await res.json()) as { sha?: unknown; notes?: unknown };
+        const body = (await res.json()) as { sha?: unknown };
         const latestSha = typeof body.sha === "string" ? body.sha.trim() : "";
         if (!latestSha) return;
-        const notes = typeof body.notes === "string" ? body.notes : null;
-        status = { hasUpdate: latestSha !== CURRENT_SHA, notes };
+        status = { hasUpdate: latestSha !== CURRENT_SHA };
+        // Push so the banner shows even if the renderer mounted before the fetch
+        // completed (first-launch race on slow networks).
+        const win = getMainWindow();
+        if (win && !win.isDestroyed()) {
+            win.webContents.send(IPC.UpdatesStatusUpdated, status);
+        }
     } catch {
         // Silent: no network, GitHub down, whatever. Try again next boot.
     }
@@ -117,7 +122,7 @@ xattr -cr "/Applications/${APP_NAME}.app" || true
 hdiutil detach "$MOUNT" -quiet -force || true
 rm -f "${dmgPath}"
 
-open -a "${APP_NAME}"
+open "/Applications/${APP_NAME}.app"
 echo "[clipstack-updater] $(date) done"
 `;
 }

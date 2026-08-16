@@ -1,7 +1,7 @@
 import { ChangeEvent, KeyboardEvent, useEffect, useState } from "react";
 import styled from "styled-components";
 
-import { Input } from "@renderer/components";
+import { Callout, CalloutCode, Flex, Input, SettingToggle, Typography } from "@renderer/components";
 import { IconInformationCircle } from "@renderer/SVGs";
 import { MIN_MAX_CLIPS, MAX_MAX_CLIPS } from "../../../shared/types";
 
@@ -75,10 +75,12 @@ export function SettingsTab() {
     const [accel, setAccel] = useState<string>("");
     const [error, setError] = useState<string | null>(null);
     const [maxClips, setMaxClipsState] = useState<string>("");
+    const [captureToClipboard, setCaptureToClipboardState] = useState<boolean>(true);
 
     useEffect(() => {
         void window.clipstack.getHotkey().then(setAccel);
         void window.clipstack.getMaxClips().then((n) => setMaxClipsState(String(n)));
+        void window.clipstack.getCaptureToClipboard().then(setCaptureToClipboardState);
     }, []);
 
     const onKeyDown = async (e: KeyboardEvent<HTMLInputElement>): Promise<void> => {
@@ -112,6 +114,12 @@ export function SettingsTab() {
         }
     };
 
+    const changeCaptureToClipboard = async (next: boolean): Promise<void> => {
+        setCaptureToClipboardState(next);
+        const applied = await window.clipstack.setCaptureToClipboard(next);
+        setCaptureToClipboardState(applied);
+    };
+
     return (
         <Wrapper>
             <Input
@@ -135,11 +143,37 @@ export function SettingsTab() {
                 onBlur={commitMaxClips}
                 onKeyDown={onMaxClipsKeyDown}
             />
+            <Spacer />
+            <Flex gap={8} style={{ marginBottom: 8 }}>
+                <IconInformationCircle />
+                <Typography size={12} weight="medium" transform="uppercase">
+                    Capture screenshots to clipboard
+                </Typography>
+            </Flex>
+            <SettingToggle
+                on={captureToClipboard}
+                onChange={changeCaptureToClipboard}
+                title={captureToClipboard ? "On" : "Off"}
+                hint={
+                    captureToClipboard
+                        ? "⌘⇧3/4/5 goes to ClipStack. macOS thumbnail + Desktop save are paused while ClipStack runs, and restored automatically on Quit."
+                        : "⌘⇧3/4/5 uses native macOS behavior (thumbnail + save to Desktop). ClipStack does not capture screenshots."
+                }
+            />
+            <Spacer />
+            <Callout>
+                If macOS screenshots stop showing the preview thumbnail even after quitting ClipStack (e.g. because it
+                was force-killed), turn this toggle OFF here, or run once in Terminal:
+                <CalloutCode>defaults delete com.apple.screencapture target && killall SystemUIServer</CalloutCode>
+            </Callout>
         </Wrapper>
     );
 }
 
 const Wrapper = styled.div`
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
     padding: 16px;
 `;
 

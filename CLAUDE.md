@@ -50,7 +50,7 @@ clipstack/
 │   │   ├── windowManager.ts        # single BrowserWindow, showInactive, position under tray
 │   │   ├── tray.ts                 # tray icon + context menu
 │   │   ├── hotkey.ts               # global shortcut register + change with rollback
-│   │   ├── screencapture.ts        # sets Cmd+Shift+3/4/5 target = clipboard
+│   │   ├── screencapture.ts        # session-scoped: sets Cmd+Shift+3/4/5 target = clipboard when setting ON; restores on quit
 │   │   └── ipcHandlers.ts          # ipcMain handlers + broadcast
 │   ├── preload/
 │   │   ├── index.ts                # contextBridge, exposes window.clipstack API
@@ -90,13 +90,15 @@ type ClipboardItem = {
 };
 
 type AppSettings = {
-    hotkey: string;           // Electron accelerator string
-    maxClips: number;         // clamped to [MIN_MAX_CLIPS, MAX_MAX_CLIPS]
+    hotkey: string;                             // Electron accelerator string
+    maxClips: number;                           // clamped to [MIN_MAX_CLIPS, MAX_MAX_CLIPS]
+    captureScreenshotsToClipboard: boolean;     // when true, sets defaults com.apple.screencapture target=clipboard while running
 };
 
 const DEFAULT_HOTKEY = "Command+Shift+V";
 const DEFAULT_WINDOW_SIZE = { width: 400, height: 500 };
 const DEFAULT_MAX_CLIPS = 50;
+const DEFAULT_CAPTURE_TO_CLIPBOARD = true;
 const MIN_MAX_CLIPS = 1;
 const MAX_MAX_CLIPS = 200;
 ```
@@ -119,6 +121,8 @@ const MAX_MAX_CLIPS = 200;
 | `settings:set-hotkey`                    | renderer → main (invoke)     | `(accelerator)` → `{ ok: boolean; error?: string }`                    |
 | `settings:get-max-clips`                 | renderer → main (invoke)     | `()` → `number`                                                        |
 | `settings:set-max-clips`                 | renderer → main (invoke)     | `(n)` → `{ maxClips, items }` (trims to cap, deletes dropped PNGs)     |
+| `settings:get-capture-to-clipboard`      | renderer → main (invoke)     | `()` → `boolean`                                                       |
+| `settings:set-capture-to-clipboard`      | renderer → main (invoke)     | `(value)` → applies to macOS + persists → `boolean` (applied value)    |
 | `window:hide`                            | renderer → main (invoke)     | `()` → hide window (used by Esc key)                                   |
 | `system:accessibility-status`            | renderer → main (invoke)     | `()` → `boolean` (check-only, no native prompt)                        |
 | `system:open-accessibility-settings`     | renderer → main (invoke)     | `()` → opens System Settings → Privacy & Security → Accessibility      |
@@ -209,11 +213,19 @@ If the binary isn't present or Accessibility isn't granted, the helper still spa
 
 ### `screencapture.ts`
 
-`ensureScreenshotTargetIsClipboard()` runs on `whenReady`: reads `defaults read com.apple.screencapture target`; if not `clipboard`, writes it + `killall SystemUIServer` so `⌘⇧3/4/5` land on the pasteboard. Idempotent. Not restored on quit — the whole reason to install ClipStack is this behaviour. Undo manually:
+Session-scoped mutation of `com.apple.screencapture target`. Controlled by the `captureScreenshotsToClipboard` setting (default `true`).
+
+- `applyCaptureToClipboard(enabled)` — called on `whenReady` with the persisted setting, and again from the Settings toggle IPC. When `enabled=true` and current target ≠ `clipboard`, writes it + `killall SystemUIServer` and sets an in-memory `sessionModified` flag. When `enabled=false` and `sessionModified`, runs `defaults delete target` + `killall SystemUIServer` and clears the flag.
+- `restoreScreenshotTarget()` — synchronous (`execFileSync`), called from `will-quit`. Runs the delete + killall only if `sessionModified`. Sync because async `will-quit` handlers may be truncated when the event loop tears down.
+- Never touches the key if `sessionModified === false` — protects any value the user set themselves before installing ClipStack.
+
+Known limitation: `kill -9` / hard crash bypasses `will-quit` → macOS stays on `target=clipboard`. Recovery: relaunch ClipStack and quit normally (restores on quit), OR toggle setting off in Settings, OR run manually:
 
 ```
 defaults delete com.apple.screencapture target && killall SystemUIServer
 ```
+
+The Settings tab includes a recovery hint pointing users to this command.
 
 `globalShortcut.register('Command+Shift+4')` interception was tried and does NOT work: WindowServer consumes the shortcut below Carbon `RegisterEventHotKey`, callback never fires.
 
@@ -307,6 +319,7 @@ open "$HOME/Library/Application Support/clipstack/clip-images"
 - **`app.relaunch()` in dev** — spawns Electron with the raw binary path and bypasses electron-vite's dev server → renderer loads blank. `SystemRelaunch` handler gates on `app.isPackaged`; in dev it just logs.
 - **macOS 14+ Cooperative Activation** — pasting immediately after `app.hide()` lands `⌘V` inside ClipStack because the target isn't yet frontmost. The `did-resign-active` wait + helper's `isActive` poll fix this.
 - **Chrome/Facebook multi-phase copies** — `changeCount` bumps twice within ~200ms (first text-only, then image). Helper's `waitForPasteboardReady` coalesces them so we don't add a text item then a duplicate image item.
+- **`kill -9` / hard crash bypasses screenshot restore** — `will-quit` doesn't fire on SIGKILL / kernel panic, so `com.apple.screencapture target=clipboard` stays set. User symptom: `⌘⇧4` still copies to clipboard but no bottom-right thumbnail after ClipStack is closed. Recovery paths documented inline in `SettingsTab.tsx` recovery hint. Not fixable at code level — SIGKILL cannot be trapped.
 
 ## 9. Electron API — versioning
 

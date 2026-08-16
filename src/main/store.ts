@@ -4,6 +4,7 @@ import {
     AppSettings,
     ClipboardItem,
     ClipboardItemType,
+    DEFAULT_CAPTURE_TO_CLIPBOARD,
     DEFAULT_HOTKEY,
     DEFAULT_MAX_CLIPS,
     MAX_MAX_CLIPS,
@@ -20,7 +21,11 @@ const store = new Store<Schema>({
     name: "clipstack",
     defaults: {
         items: [],
-        settings: { hotkey: DEFAULT_HOTKEY, maxClips: DEFAULT_MAX_CLIPS }
+        settings: {
+            hotkey: DEFAULT_HOTKEY,
+            maxClips: DEFAULT_MAX_CLIPS,
+            captureScreenshotsToClipboard: DEFAULT_CAPTURE_TO_CLIPBOARD
+        }
     }
 });
 
@@ -28,7 +33,9 @@ function readSettings(): AppSettings {
     const s = store.get("settings") as Partial<AppSettings> | undefined;
     return {
         hotkey: s?.hotkey || DEFAULT_HOTKEY,
-        maxClips: clampMaxClips(s?.maxClips ?? DEFAULT_MAX_CLIPS)
+        maxClips: clampMaxClips(s?.maxClips ?? DEFAULT_MAX_CLIPS),
+        captureScreenshotsToClipboard:
+            s?.captureScreenshotsToClipboard ?? DEFAULT_CAPTURE_TO_CLIPBOARD
     };
 }
 
@@ -207,4 +214,13 @@ export function setMaxClips(n: number): ClipboardItem[] {
     const settings = readSettings();
     store.set("settings", { ...settings, maxClips: cap });
     return trimUnpinnedToCap(cap);
+}
+
+export function getCaptureToClipboard(): boolean {
+    return readSettings().captureScreenshotsToClipboard;
+}
+
+export function setCaptureToClipboard(value: boolean): void {
+    const settings = readSettings();
+    store.set("settings", { ...settings, captureScreenshotsToClipboard: value });
 }

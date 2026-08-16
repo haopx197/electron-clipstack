@@ -1,11 +1,23 @@
 import { ipcMain, clipboard, nativeImage, app, systemPreferences, shell } from "electron";
 import { readFileSync } from "fs";
 import { IPC } from "../shared/ipc";
-import { getItems, pinItem, deleteItem, clearAll, findItem, getHotkey, getMaxClips, setMaxClips } from "./store";
+import {
+    getItems,
+    pinItem,
+    deleteItem,
+    clearAll,
+    findItem,
+    getHotkey,
+    getMaxClips,
+    setMaxClips,
+    getCaptureToClipboard,
+    setCaptureToClipboard
+} from "./store";
 import { markClipboardAsCurrent } from "./clipboardWatcher";
 import { simulatePasteViaHelper } from "./helper";
 import { changeHotkey } from "./hotkey";
 import { getMainWindow, hideWindow } from "./windowManager";
+import { applyCaptureToClipboard } from "./screencapture";
 import { ClipboardItem } from "../shared/types";
 
 // Detect SVG to split paste flow (SVG doesn't go through nativeImage). Other
@@ -138,6 +150,13 @@ export function registerIpcHandlers(): void {
         const items = setMaxClips(n);
         broadcastItemsUpdated();
         return { maxClips: getMaxClips(), items };
+    });
+
+    ipcMain.handle(IPC.SettingsGetCaptureToClipboard, () => getCaptureToClipboard());
+    ipcMain.handle(IPC.SettingsSetCaptureToClipboard, async (_e, value: boolean) => {
+        await applyCaptureToClipboard(value);
+        setCaptureToClipboard(value);
+        return value;
     });
 
     ipcMain.handle(IPC.WindowHide, () => hideWindow());

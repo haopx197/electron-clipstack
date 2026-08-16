@@ -4,10 +4,11 @@ import { electronApp } from "@electron-toolkit/utils";
 import { createMainWindow, showWindow } from "./windowManager";
 import { createTray } from "./tray";
 import { registerHotkey, unregisterAllHotkeys } from "./hotkey";
-import { ensureScreenshotTargetIsClipboard } from "./screencapture";
+import { applyCaptureToClipboard, restoreScreenshotTarget } from "./screencapture";
 import { registerIpcHandlers, broadcastItemsUpdated } from "./ipcHandlers";
 import { startClipboardWatcher, stopClipboardWatcher } from "./clipboardWatcher";
 import { startHelper } from "./helper";
+import { getCaptureToClipboard } from "./store";
 
 // Custom scheme for clipboard image thumbnails. MUST run BEFORE app.whenReady().
 protocol.registerSchemesAsPrivileged([
@@ -76,7 +77,7 @@ app.whenReady().then(() => {
         console.warn("[clipstack] failed to register hotkey:", hotkeyResult.error);
     }
 
-    ensureScreenshotTargetIsClipboard();
+    void applyCaptureToClipboard(getCaptureToClipboard());
 
     startClipboardWatcher(() => {
         broadcastItemsUpdated();
@@ -86,6 +87,7 @@ app.whenReady().then(() => {
 app.on("will-quit", () => {
     stopClipboardWatcher();
     unregisterAllHotkeys();
+    restoreScreenshotTarget();
 });
 
 // Menubar-only: don't quit when window hidden.

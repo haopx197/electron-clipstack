@@ -9,6 +9,8 @@ export const IPC = {
     SettingsSetHotkey: "settings:set-hotkey",
     SettingsGetMaxClips: "settings:get-max-clips",
     SettingsSetMaxClips: "settings:set-max-clips",
+    SettingsGetCaptureToClipboard: "settings:get-capture-to-clipboard",
+    SettingsSetCaptureToClipboard: "settings:set-capture-to-clipboard",
     WindowHide: "window:hide",
     SystemAccessibilityStatus: "system:accessibility-status",
     SystemOpenAccessibilitySettings: "system:open-accessibility-settings",

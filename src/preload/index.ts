@@ -17,6 +17,11 @@ const clipstack = {
     setMaxClips: (n: number): Promise<{ maxClips: number; items: ClipboardItem[] }> =>
         ipcRenderer.invoke(IPC.SettingsSetMaxClips, n),
 
+    getCaptureToClipboard: (): Promise<boolean> =>
+        ipcRenderer.invoke(IPC.SettingsGetCaptureToClipboard),
+    setCaptureToClipboard: (value: boolean): Promise<boolean> =>
+        ipcRenderer.invoke(IPC.SettingsSetCaptureToClipboard, value),
+
     hideWindow: (): Promise<void> => ipcRenderer.invoke(IPC.WindowHide),
 
     getAccessibilityStatus: (): Promise<boolean> => ipcRenderer.invoke(IPC.SystemAccessibilityStatus),

@@ -10,6 +10,7 @@ export const GlobalStyles = createGlobalStyle`
         --color-white: #ffffff;
 
         --font: "Google Sans", -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+        --font-mono: "Overpass Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, monospace;
     }
 
     * {

@@ -24,6 +24,7 @@ export type ClipboardItem = {
 export type AppSettings = {
     hotkey: string;
     maxClips: number;
+    captureScreenshotsToClipboard: boolean;
 };
 
 export type SetHotkeyResult = {
@@ -34,5 +35,6 @@ export type SetHotkeyResult = {
 export const DEFAULT_HOTKEY = "Command+Shift+V";
 export const DEFAULT_WINDOW_SIZE = { width: 400, height: 500 };
 export const DEFAULT_MAX_CLIPS = 50;
+export const DEFAULT_CAPTURE_TO_CLIPBOARD = true;
 export const MIN_MAX_CLIPS = 1;
 export const MAX_MAX_CLIPS = 200;

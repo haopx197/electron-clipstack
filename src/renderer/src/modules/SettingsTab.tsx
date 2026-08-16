@@ -1,9 +1,9 @@
 import { ChangeEvent, KeyboardEvent, useEffect, useState } from "react";
 import styled from "styled-components";
 
-import { Button, Callout, CalloutCode, Flex, Input, SettingToggle, Typography } from "@renderer/components";
+import { Callout, CalloutCode, Flex, Input, SettingToggle, Typography } from "@renderer/components";
 import { IconInformationCircle } from "@renderer/SVGs";
-import { MIN_MAX_CLIPS, MAX_MAX_CLIPS, UpdateInstallProgress, UpdateStatus } from "../../../shared/types";
+import { MIN_MAX_CLIPS, MAX_MAX_CLIPS } from "../../../shared/types";
 
 const MODIFIER_KEYS = new Set(["Control", "Shift", "Alt", "Meta"]);
 
@@ -76,19 +76,11 @@ export function SettingsTab() {
     const [error, setError] = useState<string | null>(null);
     const [maxClips, setMaxClipsState] = useState<string>("");
     const [captureToClipboard, setCaptureToClipboardState] = useState<boolean>(true);
-    const [update, setUpdate] = useState<UpdateStatus>({ hasUpdate: false, notes: null });
-    const [install, setInstall] = useState<UpdateInstallProgress>({
-        phase: "idle",
-        percent: 0,
-        error: null
-    });
 
     useEffect(() => {
         void window.clipstack.getHotkey().then(setAccel);
         void window.clipstack.getMaxClips().then((n) => setMaxClipsState(String(n)));
         void window.clipstack.getCaptureToClipboard().then(setCaptureToClipboardState);
-        void window.clipstack.getUpdateStatus().then(setUpdate);
-        return window.clipstack.onUpdateInstallProgress(setInstall);
     }, []);
 
     const onKeyDown = async (e: KeyboardEvent<HTMLInputElement>): Promise<void> => {
@@ -174,47 +166,6 @@ export function SettingsTab() {
                 was force-killed), turn this toggle OFF here, or run once in Terminal:
                 <CalloutCode>defaults delete com.apple.screencapture target && killall SystemUIServer</CalloutCode>
             </Callout>
-            {update.hasUpdate && (
-                <>
-                    <Spacer />
-                    <Flex gap={8} style={{ marginBottom: 8 }}>
-                        <IconInformationCircle />
-                        <Typography size={12} weight="medium" transform="uppercase">
-                            Update available
-                        </Typography>
-                    </Flex>
-                    <UpdateBox>
-                        {update.notes && (
-                            <Notes>
-                                <Typography size={12}>{update.notes}</Typography>
-                            </Notes>
-                        )}
-                        {install.phase === "downloading" && (
-                            <ProgressWrap>
-                                <ProgressBar $percent={install.percent} />
-                                <Typography size={11} style={{ marginTop: 4, opacity: 0.7 }}>
-                                    Downloading… {Math.round(install.percent * 100)}%
-                                </Typography>
-                            </ProgressWrap>
-                        )}
-                        {install.phase === "installing" && (
-                            <Typography size={11} style={{ marginTop: 8, opacity: 0.7 }}>
-                                Installing… ClipStack will restart shortly.
-                            </Typography>
-                        )}
-                        {install.phase === "error" && install.error && (
-                            <Typography size={11} style={{ marginTop: 8, opacity: 0.7 }}>
-                                Install failed: {install.error}
-                            </Typography>
-                        )}
-                        {install.phase !== "downloading" && install.phase !== "installing" && (
-                            <Flex gap={8} style={{ marginTop: 10 }}>
-                                <Button onClick={() => window.clipstack.installUpdate()}>Install update</Button>
-                            </Flex>
-                        )}
-                    </UpdateBox>
-                </>
-            )}
         </Wrapper>
     );
 }
@@ -228,39 +179,4 @@ const Wrapper = styled.div`
 
 const Spacer = styled.div`
     height: 16px;
-`;
-
-const UpdateBox = styled.div`
-    padding: 12px;
-    border-radius: 12px;
-    background: color-mix(in srgb, var(--color-primary) 10%, transparent);
-`;
-
-const Notes = styled.div`
-    margin-top: 8px;
-    padding: 8px 10px;
-    border-radius: 8px;
-    background: var(--color-white);
-    white-space: pre-wrap;
-`;
-
-const ProgressWrap = styled.div`
-    margin-top: 10px;
-`;
-
-const ProgressBar = styled.div<{ $percent: number }>`
-    height: 6px;
-    border-radius: 6px;
-    background: var(--color-white);
-    position: relative;
-    overflow: hidden;
-
-    &::after {
-        content: "";
-        position: absolute;
-        inset: 0;
-        width: ${(p) => Math.max(0, Math.min(1, p.$percent)) * 100}%;
-        background: var(--color-primary);
-        transition: width 120ms linear;
-    }
 `;

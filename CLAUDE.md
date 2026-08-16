@@ -252,7 +252,7 @@ Silent auto-update over GitHub Releases. No `electron-updater` — that library 
 
 - **Build SHA injection** — [`electron.vite.config.ts`](electron.vite.config.ts) runs `git rev-parse --short HEAD` at build time and injects it into the main bundle via Vite `define: { __BUILD_SHA__: ... }`. Falls back to `"dev"` outside a git checkout; dev builds skip the update check entirely so they never nag.
 - **Boot check** — [`main/index.ts`](src/main/index.ts) fires `void checkForUpdate()` once, no timer, no periodic polling. Fetches `https://github.com/haopx197/electron-clipstack/releases/latest/download/latest.json?t=<ts>` (cache-bust against GitHub's CDN). If `latestSha !== CURRENT_SHA`, sets `hasUpdate = true`. All errors swallowed silently — retry next boot.
-- **UI** — [`SettingsTab.tsx`](src/renderer/src/modules/SettingsTab.tsx) renders the "Update available" block only when `status.hasUpdate === true`. No manual "Check for updates" button — boot check is the only trigger. When there's no update, the section doesn't exist.
+- **UI** — [`UpdateBanner.tsx`](src/renderer/src/components/UpdateBanner.tsx) sits directly below `DragHandle`, above `AccessibilityBanner`. Renders nothing until `status.hasUpdate === true`. During download it overlays a semi-transparent progress fill on its own background instead of a separate progress bar. No manual "Check for updates" trigger — boot check is the only path in.
 - **Install flow** — `installUpdate()` downloads the arch-appropriate DMG (`process.arch === "arm64"` → `clipstack-arm64.dmg`, else `clipstack-x64.dmg`) to `userData/updates/ClipStack-update.dmg`, streaming progress via the `updates:install-progress` push channel (throttled to 100ms). Then writes a detached bash script to `/tmp/clipstack-installer-<ts>.sh` and `spawn`s it with `{ detached: true, stdio: "ignore" }` + `unref()`, and calls `app.quit()` after 300ms.
 - **The installer script** — hardcoded `PATH=/usr/bin:/bin:/usr/sbin:/sbin` because Electron apps launched from Finder inherit minimal PATH and would fail to find `hdiutil`, `xattr`, etc. Waits up to 30s (`kill -0 <pid>` loop) for the app to exit, then mirrors `install.sh`: `hdiutil attach` → `rm -rf /Applications/ClipStack.app` → `cp -R` → `xattr -cr` → `hdiutil detach` → `open -a ClipStack`. Log at `userData/updates/installer.log`.
 - **`app.isPackaged` gate** — `installUpdate()` no-ops in dev; nothing to swap in.
@@ -262,7 +262,7 @@ Persistent state across updates: user data lives in `userData` (clip history JSO
 
 ## 6. Renderer
 
-- **`App`** — `AppShell` with `DragHandle` (top drag strip), `AccessibilityBanner`, then `TabView`.
+- **`App`** — `AppShell` with `DragHandle` (top drag strip), then optional `UpdateBanner`, then `AccessibilityBanner`, then `TabView`. Banners only render when their condition is true (has update / missing AX).
 - **`DragHandle`** — 22px strip with `-webkit-app-region: drag`. Lets the user reposition the frameless window. Interactive children elsewhere are outside the drag region so their clicks route normally.
 - **`TabView`** — three tabs: `Clipboard` (default), `Icons` (placeholder), `Settings`. Esc key closes settings if open, otherwise hides the window.
 - **`ClipboardTab`** — header (count / cap / `Clear All` when there are unpinned items), then list.

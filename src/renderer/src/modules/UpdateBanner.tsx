@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import styled from "styled-components";
+
 import type { UpdateInstallProgress, UpdateStatus } from "../../../shared/types";
 import { Button, Typography } from "../components";
 
@@ -62,7 +63,7 @@ export function UpdateBanner() {
                 </TextCol>
                 {!busy && (
                     <Button onClick={() => window.clipstack.installUpdate()}>
-                        {phase === "error" ? "Retry" : "Install"}
+                        {phase === "error" ? "Retry" : "Update"}
                     </Button>
                 )}
             </Content>
@@ -73,8 +74,8 @@ export function UpdateBanner() {
 const Wrap = styled.div`
     position: relative;
     padding: 8px 12px;
-    background: color-mix(in srgb, var(--color-primary) 15%, transparent);
-    border-bottom: 1px solid color-mix(in srgb, var(--color-primary) 30%, transparent);
+    background: color-mix(in srgb, var(--color-primary) 20%, transparent);
+    border-bottom: 1px solid var(--color-primary);
     flex-shrink: 0;
     overflow: hidden;
 `;
@@ -83,7 +84,7 @@ const ProgressFill = styled.div<{ $percent: number }>`
     position: absolute;
     inset: 0;
     width: ${(p) => Math.max(0, Math.min(1, p.$percent)) * 100}%;
-    background: color-mix(in srgb, var(--color-primary) 25%, transparent);
+    background: color-mix(in srgb, var(--color-primary) 40%, transparent);
     transition: width 120ms linear;
     pointer-events: none;
 `;

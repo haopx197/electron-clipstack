@@ -249,16 +249,16 @@ Image write path branches on SVG detection (`sniffUti` — first 2KB text scan f
 
 ### `updater.ts`
 
-Silent auto-update over GitHub Releases. No `electron-updater` — that library requires a code-signed bundle to verify updates, which we deliberately don't have (§7). Instead, we compare the git short SHA baked into the DMG at build time against a `latest.json` published as a release asset.
+Silent auto-update over GitHub Releases. No `electron-updater` — that library requires a code-signed bundle to verify updates, which we deliberately don't have (§7). Instead, we compare an opaque build identifier baked into the DMG at build time against a `latest.json` published as a release asset.
 
-- **Build SHA injection** — [`electron.vite.config.ts`](electron.vite.config.ts) runs `git rev-parse --short HEAD` at build time and injects it into the main bundle via Vite `define: { __BUILD_SHA__: ... }`. Falls back to `"dev"` outside a git checkout; dev builds skip the update check entirely so they never nag.
+- **Build identifier injection** — [`electron.vite.config.ts`](electron.vite.config.ts) generates a fresh `Date.now()` (Unix-ms) string at production build start and injects it into the main bundle via Vite `define: { __BUILD_SHA__: ... }`. Deliberately independent of git — every rebuild, even at the same commit with no source changes, is a distinct "version" so re-releasing is never a no-op for the updater. Dev (`command === "serve"`) hard-codes `"dev"` so the check short-circuits and never nags during development.
 - **Boot check** — [`main/index.ts`](src/main/index.ts) fires `void checkForUpdate()` once, no timer, no periodic polling. Fetches `https://github.com/haopx197/electron-clipstack/releases/latest/download/latest.json?t=<ts>` (cache-bust against GitHub's CDN). If `latestSha !== CURRENT_SHA`, sets `hasUpdate = true`. All errors swallowed silently — retry next boot.
 - **UI** — [`UpdateBanner.tsx`](src/renderer/src/modules/UpdateBanner.tsx) sits below `DragHandle` and below `AccessibilityBanner`. Renders nothing until `status.hasUpdate === true`. During download it overlays a semi-transparent progress fill on its own background instead of a separate progress bar; the fill stays at 100% through the `installing` phase so it doesn't snap back to empty before the app quits. No manual "Check for updates" trigger — boot check is the only path in.
 - **Renderer race on first launch** — the banner subscribes to `updates:status-updated` in addition to its one-shot `getUpdateStatus()` call. `checkForUpdate()` pushes the final status when the fetch finishes, so a window that mounted before the fetch completed (slow network, first launch) still gets the "Update available" state the moment it lands.
 - **Install flow** — `installUpdate()` downloads the arch-appropriate DMG (`process.arch === "arm64"` → `clipstack-arm64.dmg`, else `clipstack-x64.dmg`) to `userData/updates/ClipStack-update.dmg`, streaming progress via the `updates:install-progress` push channel (throttled to 100ms). Then writes a detached bash script to `/tmp/clipstack-installer-<ts>.sh` and `spawn`s it with `{ detached: true, stdio: "ignore" }` + `unref()`, and calls `app.quit()` after 300ms.
 - **The installer script** — hardcoded `PATH=/usr/bin:/bin:/usr/sbin:/sbin` because Electron apps launched from Finder inherit minimal PATH and would fail to find `hdiutil`, `xattr`, etc. Waits up to 30s (`kill -0 <pid>` loop) for the app to exit, then mirrors `install.sh`: `hdiutil attach` → `rm -rf /Applications/ClipStack.app` → `cp -R` → `xattr -cr` → `hdiutil detach` → `open /Applications/ClipStack.app`. Absolute path (not `open -a ClipStack`) so Launch Services can't route to a stale bundle if the user has multiple copies. Log at `userData/updates/installer.log`.
 - **`app.isPackaged` gate** — `installUpdate()` no-ops in dev; nothing to swap in.
-- **`latest.json` shape** — `{ "sha": "abc1234" }`. Auto-generated at the end of `npm run build:mac` by [`scripts/gen-latest-json.sh`](scripts/gen-latest-json.sh) so the SHA can never drift from the DMG's `__BUILD_SHA__`. Release notes for GitHub are typed into the release form itself; the in-app banner shows a static "A newer version of ClipStack is ready." — no per-release copy.
+- **`latest.json` shape** — `{ "sha": "<opaque build id>" }`. Field name is historical; the value is whatever `__BUILD_SHA__` was baked with (currently a Unix-ms timestamp). Auto-generated at the end of `npm run build:mac` by [`scripts/gen-latest-json.sh`](scripts/gen-latest-json.sh), which reads the identifier back out of `out/main/index.js` so it can never drift from the DMG. Release notes for GitHub are typed into the release form itself; the in-app banner shows a static "A newer version of ClipStack is ready." — no per-release copy.
 
 Persistent state across updates: user data lives in `userData` (clip history JSON + `clip-images/`), which is untouched by the installer script — only `/Applications/ClipStack.app` is replaced. Accessibility permission usually needs to be re-granted since each unsigned build has a different ad-hoc signature (§8).
 
@@ -298,18 +298,17 @@ Each release must upload four assets so both the first-time installer and the in
 
 All four are pulled from `https://github.com/haopx197/electron-clipstack/releases/latest/download/<name>`. GitHub 404s that URL when the *latest* release is missing an asset — even if an earlier release had it — so every release must include all four.
 
-The `sha` in `latest.json` must equal `git rev-parse --short HEAD` at the commit built. That value is what electron-vite bakes into the main bundle as `__BUILD_SHA__`; if they diverge, the updater compares stale values and either shows a phantom update or misses a real one. `npm run build:mac` runs [`scripts/gen-latest-json.sh`](scripts/gen-latest-json.sh) at the end using the exact same `git rev-parse` invocation, so the two are always in sync — no manual editing.
+The `sha` field in `latest.json` must equal the `__BUILD_SHA__` baked into the DMG; if they diverge, the updater compares stale values and either shows a phantom update or misses a real one. `npm run build:mac` runs [`scripts/gen-latest-json.sh`](scripts/gen-latest-json.sh) at the end, which reads the identifier back out of `out/main/index.js`. Guaranteed match — no manual editing.
 
 Workflow:
 
 ```bash
-git commit -am "Fix ..."
 npm run build:mac
 ```
 
-Then open <https://github.com/haopx197/electron-clipstack/releases>, draft a new release with tag `build-<sha>`, drag in the two DMGs from `dist/`, `dist/latest.json`, and `scripts/install.sh`, tick **Set as the latest release**, and publish.
+Then open <https://github.com/haopx197/electron-clipstack/releases>, draft a new release with any unique tag (e.g. a date), drag in the two DMGs from `dist/`, `dist/latest.json`, and `scripts/install.sh`, tick **Set as the latest release**, and publish.
 
-Pushing the commit to the remote is *not* required for the updater to work — the release assets are what matter. But push anyway so the tag on GitHub points to a real commit.
+No git commit required — every `build:mac` invocation gets a fresh build identifier from `Date.now()`, so re-releasing without source changes is still a distinct "version" from the app's point of view. Committing before you build is still good practice for git provenance, but not a correctness requirement.
 
 After publish, users running an older build see the "Update available" banner (below `DragHandle`, below `AccessibilityBanner`) the next time they open the app.
 

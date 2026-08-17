@@ -13,7 +13,11 @@ const REPO_SLUG = "haopx197/electron-clipstack";
 const APP_NAME = "ClipStack";
 
 // latest.json is published as a release asset alongside the DMGs:
-//   { "sha": "abc1234" }
+//   { "sha": "<opaque build id>" }
+// The field name is `sha` for legacy reasons; the value is whatever
+// electron-vite baked into __BUILD_SHA__ (currently a Unix-ms timestamp).
+// gen-latest-json.sh reads it back out of the compiled main bundle so both
+// artifacts are guaranteed to hold the same identifier.
 const LATEST_JSON_URL = `https://github.com/${REPO_SLUG}/releases/latest/download/latest.json`;
 
 function dmgUrl(): string {

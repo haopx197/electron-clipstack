@@ -1,52 +1,42 @@
 import { resolve } from "path";
-import { execSync } from "child_process";
 import { defineConfig, externalizeDepsPlugin } from "electron-vite";
 import react from "@vitejs/plugin-react";
 
-// Short git SHA embedded at build time — used by the updater to compare the
-// running build against the `latest.json` published on GitHub Releases. Falls
-// back to "dev" outside a git checkout so builds don't fail.
-function getBuildSha(): string {
-    try {
-        return execSync("git rev-parse --short HEAD", {
-            stdio: ["ignore", "pipe", "ignore"]
-        })
-            .toString()
-            .trim();
-    } catch {
-        return "dev";
-    }
-}
-
-const BUILD_SHA = getBuildSha();
-
-export default defineConfig({
-    main: {
-        plugins: [externalizeDepsPlugin({ exclude: ["electron-store"] })],
-        define: {
-            __BUILD_SHA__: JSON.stringify(BUILD_SHA)
-        },
-        resolve: {
-            alias: {
-                "@shared": resolve("src/shared")
-            }
-        }
-    },
-    preload: {
-        plugins: [externalizeDepsPlugin()],
-        resolve: {
-            alias: {
-                "@shared": resolve("src/shared")
-            }
-        }
-    },
-    renderer: {
-        resolve: {
-            alias: {
-                "@renderer": resolve("src/renderer/src"),
-                "@shared": resolve("src/shared")
+// Build identifier embedded via Vite `define` — the updater compares this to
+// `latest.json` on GitHub Releases. Fresh Unix-ms timestamp for each production
+// build so every rebuild (even at the same commit, with no source changes) is
+// a distinct "version" and triggers the "Update available" banner. Dev builds
+// use the literal "dev" so the updater short-circuits and never nags.
+export default defineConfig(({ command }) => {
+    const BUILD_SHA = command === "build" ? String(Date.now()) : "dev";
+    return {
+        main: {
+            plugins: [externalizeDepsPlugin({ exclude: ["electron-store"] })],
+            define: {
+                __BUILD_SHA__: JSON.stringify(BUILD_SHA)
+            },
+            resolve: {
+                alias: {
+                    "@shared": resolve("src/shared")
+                }
             }
         },
-        plugins: [react()]
-    }
+        preload: {
+            plugins: [externalizeDepsPlugin()],
+            resolve: {
+                alias: {
+                    "@shared": resolve("src/shared")
+                }
+            }
+        },
+        renderer: {
+            resolve: {
+                alias: {
+                    "@renderer": resolve("src/renderer/src"),
+                    "@shared": resolve("src/shared")
+                }
+            },
+            plugins: [react()]
+        }
+    };
 });

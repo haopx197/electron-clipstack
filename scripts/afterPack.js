@@ -11,7 +11,7 @@
 //      and Gatekeeper reject the whole bundle as "code has no resources but
 //      signature indicates they must be present". Finder shows the no-entry
 //      slash icon on the app.
-//   2. Our own `extraFiles` (ClipStackHelper.app + DisclaimSpawner) land in
+//   2. Our own `extraFiles` (ClipStack.app helper + DisclaimSpawner) land in
 //      Contents/Frameworks/ AFTER Electron's pre-signed CodeResources was
 //      computed, so the parent's signature no longer covers them.
 //

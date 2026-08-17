@@ -19,11 +19,16 @@ set -e
 
 BIN="${1:?binary path required}"
 ICON="${2:?icon path required}"
+# Optional 3rd arg: name of the produced .app bundle (default: derived from
+# binary). System Settings → Accessibility uses the .app folder name for
+# display, so this lets us keep the binary named "ClipStackHelper" (unique in
+# `ps`) while showing users the friendly "ClipStack" label in the pane.
+APP_BASENAME="${3:-$(basename "$BIN")}"
 
 [[ -f "$BIN" ]] || { echo "[wrap-helper] missing binary: $BIN" >&2; exit 1; }
 [[ -f "$ICON" ]] || { echo "[wrap-helper] missing icon: $ICON" >&2; exit 1; }
 
-APP="${BIN}.app"
+APP="$(dirname "$BIN")/${APP_BASENAME}.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS"
 mkdir -p "$APP/Contents/Resources"

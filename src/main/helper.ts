@@ -24,14 +24,19 @@ let pasteboardFilePaths: string[] = [];
 let pasteboardImagePath: string | null = null;
 
 function resolveHelperPath(): string {
-    // The helper is packaged as `ClipStackHelper.app` in `Contents/Frameworks/`
+    // The helper is packaged as `ClipStack.app` in `Contents/Frameworks/`
     // (via electron-builder `extraFiles`). Launch Services indexes standard
     // helper locations like Frameworks/ but NOT nested Resources paths, so
     // this placement is what lets macOS show the ClipStack icon in the
     // Accessibility settings list (icon.icns is inside the helper bundle).
+    // The .app folder is named `ClipStack.app` (not `ClipStackHelper.app`)
+    // because System Settings uses the folder basename for display. The
+    // binary inside is still `ClipStackHelper` — that name is what shows up
+    // in `ps` output, and keeping it distinct from the parent's `ClipStack`
+    // executable makes debugging easier.
     // `process.resourcesPath` in packaged app is `Contents/Resources`, so
     // `..` = `Contents/`.
-    const exe = "ClipStackHelper.app/Contents/MacOS/ClipStackHelper";
+    const exe = "ClipStack.app/Contents/MacOS/ClipStackHelper";
     const candidates = [
         join(process.resourcesPath, "..", "Frameworks", exe),
         join(__dirname, "..", "..", "resources", exe)

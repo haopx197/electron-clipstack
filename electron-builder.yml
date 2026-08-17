@@ -22,8 +22,8 @@ asarUnpack:
     # indexes it as a proper .app bundle (custom icon + stable TCC identity).
     - resources/trayIconTemplate*.png
 extraFiles:
-    - from: resources/ClipStackHelper.app
-      to: Frameworks/ClipStackHelper.app
+    - from: resources/ClipStack.app
+      to: Frameworks/ClipStack.app
     - from: resources/DisclaimSpawner
       to: Frameworks/DisclaimSpawner
 win:

@@ -1,7 +1,8 @@
-import { app, protocol, net, session, shell } from "electron";
+import { app, protocol, net, session, shell, systemPreferences } from "electron";
 import { pathToFileURL } from "url";
 import { electronApp } from "@electron-toolkit/utils";
-import { createMainWindow, showWindow } from "./windowManager";
+import { IPC } from "../shared/ipc";
+import { createMainWindow, getMainWindow, showWindow } from "./windowManager";
 import { createTray } from "./tray";
 import { registerHotkey, unregisterAllHotkeys } from "./hotkey";
 import { applyCaptureToClipboard, restoreScreenshotTarget } from "./screencapture";
@@ -88,6 +89,17 @@ app.whenReady().then(() => {
     // no manual re-check. On completion the result is pushed to the renderer
     // (`UpdatesStatusUpdated`) in case the window mounted before it finished.
     void checkForUpdate();
+
+    // Fires on NSDistributedNotificationCenter when *any* app's Accessibility
+    // trust flips (grant / revoke / add / remove from the pane). We just re-
+    // broadcast; renderer re-checks its own status. Replaces the 300ms poll
+    // that AccessibilityBanner used to run.
+    systemPreferences.subscribeNotification("com.apple.accessibility.api", () => {
+        const win = getMainWindow();
+        if (win && !win.isDestroyed()) {
+            win.webContents.send(IPC.SystemAccessibilityChanged);
+        }
+    });
 });
 
 app.on("will-quit", () => {

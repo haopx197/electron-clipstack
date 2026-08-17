@@ -89,13 +89,7 @@ function sniffImageFormat(bytes: Buffer): SniffResult {
     return null;
 }
 
-// Fallback interval when helper unavailable. Native path uses
-// NSPasteboard.changeCount 100ms and only notifies on change — not this.
-const FALLBACK_POLL_INTERVAL_MS = 400;
-
 let lastSignature: string | null = null;
-let fallbackTimer: NodeJS.Timeout | null = null;
-let usingHelper = false;
 let onUpdate: (() => void) | null = null;
 
 function sha1(input: string | Buffer): string {
@@ -341,23 +335,12 @@ export function startClipboardWatcher(cb: () => void): void {
 
     stopClipboardWatcher();
 
-    // Prefer native changeCount watch via helper (100ms background thread).
-    usingHelper = startClipboardWatch(poll);
-    if (usingHelper) return;
-
-    // Fallback setInterval when helper unavailable — overhead + log noise.
-    fallbackTimer = setInterval(poll, FALLBACK_POLL_INTERVAL_MS);
+    // Native changeCount watch via helper (100ms background thread).
+    startClipboardWatch(poll);
 }
 
 export function stopClipboardWatcher(): void {
-    if (usingHelper) {
-        stopClipboardWatch();
-        usingHelper = false;
-    }
-    if (fallbackTimer) {
-        clearInterval(fallbackTimer);
-        fallbackTimer = null;
-    }
+    stopClipboardWatch();
 }
 
 // Call after app writes clipboard itself (paste-item) so watcher doesn't re-capture.

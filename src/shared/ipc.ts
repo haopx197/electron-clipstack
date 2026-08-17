@@ -14,6 +14,7 @@ export const IPC = {
     SettingsSetCaptureToClipboard: "settings:set-capture-to-clipboard",
     WindowHide: "window:hide",
     SystemAccessibilityStatus: "system:accessibility-status",
+    SystemAccessibilityChanged: "system:accessibility-changed",
     SystemOpenAccessibilitySettings: "system:open-accessibility-settings",
     SystemRelaunch: "system:relaunch",
     UpdatesGetStatus: "updates:get-status",

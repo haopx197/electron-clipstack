@@ -29,6 +29,11 @@ const clipstack = {
     openAccessibilitySettings: (): Promise<void> =>
         ipcRenderer.invoke(IPC.SystemOpenAccessibilitySettings),
     relaunch: (): Promise<void> => ipcRenderer.invoke(IPC.SystemRelaunch),
+    onAccessibilityChanged: (cb: () => void): (() => void) => {
+        const listener = (): void => cb();
+        ipcRenderer.on(IPC.SystemAccessibilityChanged, listener);
+        return () => ipcRenderer.removeListener(IPC.SystemAccessibilityChanged, listener);
+    },
 
     getUpdateStatus: (): Promise<UpdateStatus> => ipcRenderer.invoke(IPC.UpdatesGetStatus),
     installUpdate: (): Promise<void> => ipcRenderer.invoke(IPC.UpdatesInstall),

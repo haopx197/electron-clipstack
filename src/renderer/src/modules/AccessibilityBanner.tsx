@@ -25,10 +25,12 @@ export function AccessibilityBanner() {
             setTrusted(ok);
         };
         void check();
-        // Poll 300ms for near-instant feedback when user toggles in System Settings.
-        // isTrustedAccessibilityClient is a cheap sync system call.
-        const id = window.setInterval(check, 300);
-        // Re-check when window/tab regains focus (user just returned from Settings).
+        // Event-driven, no polling. Main subscribes to macOS's
+        // `com.apple.accessibility.api` distributed notification (fires when
+        // any app's AX trust flips) and forwards a ping here.
+        const offAX = window.clipstack.onAccessibilityChanged(() => void check());
+        // Fallbacks — re-check when the window regains focus / becomes visible,
+        // in case the notification is missed (e.g. helper race at boot).
         const onFocus = (): void => void check();
         const onVis = (): void => {
             if (document.visibilityState === "visible") void check();
@@ -37,7 +39,7 @@ export function AccessibilityBanner() {
         document.addEventListener("visibilitychange", onVis);
         return () => {
             cancelled = true;
-            window.clearInterval(id);
+            offAX();
             window.removeEventListener("focus", onFocus);
             document.removeEventListener("visibilitychange", onVis);
         };

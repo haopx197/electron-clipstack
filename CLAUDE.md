@@ -125,6 +125,7 @@ const MAX_MAX_CLIPS = 200;
 | `settings:set-capture-to-clipboard`      | renderer → main (invoke)     | `(value)` → applies to macOS + persists → `boolean` (applied value)    |
 | `window:hide`                            | renderer → main (invoke)     | `()` → hide window (used by Esc key)                                   |
 | `system:accessibility-status`            | renderer → main (invoke)     | `()` → `boolean` (check-only, no native prompt)                        |
+| `system:accessibility-changed`           | main → renderer (push)       | fires on `com.apple.accessibility.api` distributed notification        |
 | `system:open-accessibility-settings`     | renderer → main (invoke)     | `()` → opens System Settings → Privacy & Security → Accessibility      |
 | `system:relaunch`                        | renderer → main (invoke)     | `()` → `app.relaunch()` + `exit(0)` (no-op in dev)                     |
 | `updates:get-status`                     | renderer → main (invoke)     | `()` → `UpdateStatus` (`{ hasUpdate }`)                                |
@@ -270,7 +271,7 @@ Persistent state across updates: user data lives in `userData` (clip history JSO
 - **`ClipboardTab`** — header (count / cap / `Clear All` when there are unpinned items), then list.
 - **`ClipboardItemRow`** — icon + body + hover actions (pin/unpin, delete). Body varies by type: text (3-line clamp), image (`clip-image://local/...` custom scheme, max 120px), bookmark (title + URL), file (basename + full path). Clicking anywhere except the action buttons triggers paste.
 - **`SettingsTab`** — hotkey input (records `keydown`, builds accelerator, displays with ⌘⇧⌃⌥ symbols), max-clips input (clamped `[1, 200]`, commits on blur / Enter).
-- **`AccessibilityBanner`** — shows only when `isTrustedAccessibilityClient(false)` is false. Polls every 300ms + re-checks on window focus / visibilitychange. When trust flips `false → true` calls `window.clipstack.relaunch()` so the Swift helper re-inits with permission from scratch. In dev, `relaunch` is a no-op (electron-vite spawn is incompatible with `app.relaunch()`).
+- **`AccessibilityBanner`** — shows only when `isTrustedAccessibilityClient(false)` is false. Event-driven, no polling: main subscribes to the macOS `com.apple.accessibility.api` distributed notification (fires when any app's AX trust flips) and forwards a ping via `system:accessibility-changed`; the banner re-checks on that ping plus window focus / `visibilitychange` as belt-and-braces. When trust flips `false → true` it calls `window.clipstack.relaunch()` so the Swift helper re-inits with permission from scratch. In dev, `relaunch` is a no-op (electron-vite spawn is incompatible with `app.relaunch()`).
 
 `window.clipstack` is the surface exposed by [`preload/index.ts`](src/preload/index.ts) via `contextBridge`. Renderer talks to main only through those methods and the `onItemsUpdated` push event.
 

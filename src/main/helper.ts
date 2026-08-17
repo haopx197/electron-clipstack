@@ -12,6 +12,10 @@ let stdoutBuffer = "";
 
 let mouseClickListener: ((x: number, y: number) => void) | null = null;
 let clipboardChangedListener: (() => void) | null = null;
+// FIFO of pending `ax-status` request resolvers. Query is idempotent — each
+// query pushes a resolver, each response pops the front. Order is preserved
+// because helper handles the queue on its main dispatch queue serially.
+const axStatusWaiters: ((v: boolean) => void)[] = [];
 // POSIX paths pushed by helper via NSURL → resolves /.file/id=<inode>.
 let pasteboardFilePaths: string[] = [];
 // PNG temp file the helper dumps from pasteboard via NSImage — catches legacy
@@ -62,6 +66,11 @@ function handleLine(line: Line): void {
             // Swift returns NSEvent coords (bottom-left). Electron uses top-left.
             const primary = screen.getPrimaryDisplay();
             mouseClickListener(xEv, primary.bounds.y + primary.bounds.height - yEv);
+            return;
+        }
+        case "ax-status": {
+            const resolve = axStatusWaiters.shift();
+            resolve?.(rest === "true");
             return;
         }
         // ack-only response — ignore silently.
@@ -176,4 +185,33 @@ export function startClipboardWatch(cb: () => void): boolean {
 export function stopClipboardWatch(): void {
     clipboardChangedListener = null;
     write("pb-watch-stop");
+}
+
+// Query the helper's own `AXIsProcessTrusted()`. This is the value that
+// actually matters — the helper is the process that posts CGEvents and hosts
+// the global mouse monitor. If the helper isn't running or takes too long to
+// respond, returns false so the banner errs on the safe side. 1s timeout is
+// generous: helper handles this on its main dispatch queue with no I/O.
+export function queryHelperAxStatus(): Promise<boolean> {
+    if (!child) return Promise.resolve(false);
+    return new Promise<boolean>((resolve) => {
+        let done = false;
+        const finish = (v: boolean): void => {
+            if (done) return;
+            done = true;
+            resolve(v);
+        };
+        axStatusWaiters.push(finish);
+        if (!write("ax-status")) {
+            const i = axStatusWaiters.indexOf(finish);
+            if (i >= 0) axStatusWaiters.splice(i, 1);
+            finish(false);
+            return;
+        }
+        setTimeout(() => {
+            const i = axStatusWaiters.indexOf(finish);
+            if (i >= 0) axStatusWaiters.splice(i, 1);
+            finish(false);
+        }, 1000);
+    });
 }

@@ -8,7 +8,7 @@ import { registerHotkey, unregisterAllHotkeys } from "./hotkey";
 import { applyCaptureToClipboard, restoreScreenshotTarget } from "./screencapture";
 import { registerIpcHandlers, broadcastItemsUpdated } from "./ipcHandlers";
 import { startClipboardWatcher, stopClipboardWatcher } from "./clipboardWatcher";
-import { startHelper } from "./helper";
+import { startHelper, startMouseMonitor, stopMouseMonitor } from "./helper";
 import { getCaptureToClipboard } from "./store";
 import { checkForUpdate } from "./updater";
 
@@ -70,6 +70,17 @@ app.whenReady().then(() => {
     session.defaultSession.setPermissionRequestHandler((_wc, _perm, cb) => cb(false));
 
     startHelper();
+
+    // Prime the helper's AX registration: `NSEvent.addGlobalMonitorForEvents`
+    // records a TCC request even when untrusted (returns nil), which is what
+    // makes `ClipStackHelper` appear in System Settings → Privacy →
+    // Accessibility. Without this prime, the helper only shows up after the
+    // user first opens the window (windowManager calls startMouseMonitor
+    // there) — so on a fresh install, clicking "Open Settings" from the
+    // banner reveals an empty list and the user has nothing to grant.
+    startMouseMonitor(() => {});
+    stopMouseMonitor();
+
     createMainWindow();
     createTray();
     registerIpcHandlers();
@@ -90,10 +101,9 @@ app.whenReady().then(() => {
     // (`UpdatesStatusUpdated`) in case the window mounted before it finished.
     void checkForUpdate();
 
-    // Fires on NSDistributedNotificationCenter when *any* app's Accessibility
+    // Fires on NSDistributedNotificationCenter when any app's Accessibility
     // trust flips (grant / revoke / add / remove from the pane). We just re-
-    // broadcast; renderer re-checks its own status. Replaces the 300ms poll
-    // that AccessibilityBanner used to run.
+    // broadcast; renderer decides whether to relaunch.
     systemPreferences.subscribeNotification("com.apple.accessibility.api", () => {
         const win = getMainWindow();
         if (win && !win.isDestroyed()) {

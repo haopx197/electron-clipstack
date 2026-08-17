@@ -1,4 +1,4 @@
-import { ipcMain, clipboard, nativeImage, app, systemPreferences, shell } from "electron";
+import { ipcMain, clipboard, nativeImage, app, shell } from "electron";
 import { readFileSync } from "fs";
 import { IPC } from "../shared/ipc";
 import {
@@ -14,7 +14,7 @@ import {
     setCaptureToClipboard
 } from "./store";
 import { markClipboardAsCurrent } from "./clipboardWatcher";
-import { simulatePasteViaHelper } from "./helper";
+import { simulatePasteViaHelper, queryHelperAxStatus } from "./helper";
 import { changeHotkey } from "./hotkey";
 import { getMainWindow, hideWindow } from "./windowManager";
 import { applyCaptureToClipboard } from "./screencapture";
@@ -136,10 +136,11 @@ export function registerIpcHandlers(): void {
     ipcMain.handle(IPC.SettingsGetHotkey, () => getHotkey());
     ipcMain.handle(IPC.SettingsSetHotkey, (_e, accelerator: string) => changeHotkey(accelerator));
 
-    // `false` = check-only, don't trigger native prompt.
-    ipcMain.handle(IPC.SystemAccessibilityStatus, () =>
-        systemPreferences.isTrustedAccessibilityClient(false)
-    );
+    // Ask the Swift helper, not `systemPreferences.isTrustedAccessibilityClient`.
+    // The helper is the process that actually posts CGEvents and runs the
+    // global mouse monitor — the Electron main process doesn't need AX at
+    // all, so its trust state is meaningless for whether paste works.
+    ipcMain.handle(IPC.SystemAccessibilityStatus, () => queryHelperAxStatus());
     ipcMain.handle(IPC.SystemOpenAccessibilitySettings, () =>
         shell.openExternal(
             "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"

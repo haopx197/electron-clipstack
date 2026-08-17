@@ -10,38 +10,26 @@ export function AccessibilityBanner() {
 
     useEffect(() => {
         let cancelled = false;
-        let prev: boolean | null = null;
-        const check = async (): Promise<void> => {
-            const ok = await window.clipstack.getAccessibilityStatus();
+        let untrusted = false;
+        void window.clipstack.getAccessibilityStatus().then((ok) => {
             if (cancelled) return;
-            // Transition false → true: user just granted permission. Auto-relaunch so Swift
-            // helper re-inits with AX permission from the start (mouse monitor + AX focus
-            // query need fresh state; they don't pick it up mid-run).
-            if (prev === false && ok) {
-                void window.clipstack.relaunch();
-                return;
-            }
-            prev = ok;
+            untrusted = !ok;
             setTrusted(ok);
-        };
-        void check();
-        // Event-driven, no polling. Main subscribes to macOS's
-        // `com.apple.accessibility.api` distributed notification (fires when
-        // any app's AX trust flips) and forwards a ping here.
-        const offAX = window.clipstack.onAccessibilityChanged(() => void check());
-        // Fallbacks — re-check when the window regains focus / becomes visible,
-        // in case the notification is missed (e.g. helper race at boot).
-        const onFocus = (): void => void check();
-        const onVis = (): void => {
-            if (document.visibilityState === "visible") void check();
-        };
-        window.addEventListener("focus", onFocus);
-        document.addEventListener("visibilitychange", onVis);
+        });
+
+        // macOS caches `AXIsProcessTrustedWithOptions` per-process: after the
+        // user grants Accessibility, calling it again in the running process
+        // still returns `false`. Re-checking here is useless. When the
+        // `com.apple.accessibility.api` distributed notification fires and we
+        // were untrusted, just restart — the new process reads the fresh
+        // state. Guarded so grants to other apps don't cycle us while we're
+        // already trusted.
+        const offAX = window.clipstack.onAccessibilityChanged(() => {
+            if (untrusted) void window.clipstack.relaunch();
+        });
         return () => {
             cancelled = true;
             offAX();
-            window.removeEventListener("focus", onFocus);
-            document.removeEventListener("visibilitychange", onVis);
         };
     }, []);
 

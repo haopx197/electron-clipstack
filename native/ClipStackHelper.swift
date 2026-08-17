@@ -309,6 +309,11 @@ stdinQueue.async {
                     simulatePasteCmdV()
                     DispatchQueue.main.async { send("paste:ok") }
                 }
+            case "ax-status":
+                // AXIsProcessTrusted() caches per-process, but the helper is
+                // spawned fresh whenever the main app restarts, so its value
+                // is always current w.r.t. this helper's lifetime.
+                send("ax-status:\(AXIsProcessTrusted() ? "true" : "false")")
             case "quit":
                 exit(0)
             default:

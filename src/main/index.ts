@@ -44,9 +44,13 @@ app.on("second-instance", () => {
 app.whenReady().then(() => {
     electronApp.setAppUserModelId("com.clipstack");
 
-    // Menubar-only: LSUIElement equivalent — no dock, no Cmd+Tab, no
-    // focus stealing like a regular app. Preferred over just `app.dock.hide()`.
+    // Menubar-only: no dock, no Cmd+Tab, no focus stealing. `LSUIElement=true`
+    // in Info.plist covers this from launch (before whenReady fires);
+    // `setActivationPolicy("accessory")` re-asserts at runtime; `dock.hide()`
+    // is a belt-and-braces for any transient re-activation (e.g. macOS
+    // briefly promoting the process while displaying a modal).
     app.setActivationPolicy("accessory");
+    app.dock?.hide();
 
     // Serve clip-image://local/<absolute-path> from disk (safely).
     protocol.handle("clip-image", async (request) => {

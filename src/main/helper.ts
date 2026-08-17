@@ -39,6 +39,19 @@ function resolveHelperPath(): string {
     return candidates.find((p) => existsSync(p)) ?? candidates[candidates.length - 1];
 }
 
+function resolveDisclaimSpawnerPath(): string | null {
+    // TCC responsibility disclaimer — see native/DisclaimSpawner.swift for
+    // the full rationale. Without this shim, macOS attributes the helper's
+    // Accessibility requests to the parent bundle (com.clipstack.app) instead
+    // of the helper's own bundle (com.clipstack.helper), and grants routed to
+    // the parent don't unlock the helper's own `AXIsProcessTrusted()` check.
+    const candidates = [
+        join(process.resourcesPath, "..", "Frameworks", "DisclaimSpawner"),
+        join(__dirname, "..", "..", "resources", "DisclaimSpawner")
+    ];
+    return candidates.find((p) => existsSync(p)) ?? null;
+}
+
 function write(cmd: string): boolean {
     if (!child) return false;
     try {
@@ -114,7 +127,18 @@ export function startHelper(): void {
         console.error("[clipstack] helper binary not found:", p);
         return;
     }
-    child = spawn(p, [], { stdio: ["pipe", "pipe", "pipe"] });
+    // Route the spawn through DisclaimSpawner so macOS TCC treats the helper
+    // as its own responsible process (see resolveDisclaimSpawnerPath).
+    // Falling back to a direct spawn keeps things running even if the shim
+    // is somehow missing — grant routing will be wrong but the app still
+    // functions once the user grants the parent bundle.
+    const shim = resolveDisclaimSpawnerPath();
+    if (shim) {
+        child = spawn(shim, [p], { stdio: ["pipe", "pipe", "pipe"] });
+    } else {
+        console.warn("[clipstack] DisclaimSpawner not found; spawning helper directly");
+        child = spawn(p, [], { stdio: ["pipe", "pipe", "pipe"] });
+    }
     child.stdout.setEncoding("utf8");
     child.stderr.setEncoding("utf8");
     // Swallow async EPIPE so main doesn't crash after helper exit (shutdown:
@@ -205,6 +229,15 @@ export function stopClipboardWatch(): void {
 // gets registered as an AX-eligible client in the System Settings pane.
 export function setAccessibilityChangedListener(cb: () => void): void {
     accessibilityChangedListener = cb;
+}
+
+// Ask the helper to raise macOS's native "grant Accessibility" modal — the
+// same one that used to appear when the user tried to paste while untrusted.
+// The modal has an "Open System Settings" button that jumps straight to the
+// AX pane with our helper highlighted. Fire-and-forget; the modal is
+// user-driven from there.
+export function promptAxViaHelper(): void {
+    write("prompt-ax");
 }
 
 // Query the helper's own `AXIsProcessTrusted()`. This is the value that

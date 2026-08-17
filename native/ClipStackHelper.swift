@@ -314,6 +314,15 @@ stdinQueue.async {
                 stopClipboardWatch()
                 send("pb-watch-stop:ok")
             case "paste":
+                // Skip CGEvent entirely if untrusted — macOS otherwise raises
+                // the "ClipStackHelper wants to control your computer" modal
+                // on every failed paste, which is intrusive. The banner is
+                // already telling the user AX is missing; there's only one
+                // sanctioned path to grant (banner's Open Settings button).
+                if !AXIsProcessTrusted() {
+                    send("paste:untrusted")
+                    return
+                }
                 // BG queue so we don't block main; wait + CGEvent are thread-safe.
                 // restoreTargetAndWait waits for isActive == true → deterministic,
                 // no arbitrary grace sleep needed.
@@ -322,6 +331,15 @@ stdinQueue.async {
                     simulatePasteCmdV()
                     DispatchQueue.main.async { send("paste:ok") }
                 }
+            case "prompt-ax":
+                // Trigger macOS's native "grant Accessibility" modal, which
+                // has an "Open System Settings" button. This is what the
+                // banner's Open Settings button now invokes.
+                let options: NSDictionary = [
+                    kAXTrustedCheckOptionPrompt.takeUnretainedValue(): true
+                ]
+                _ = AXIsProcessTrustedWithOptions(options)
+                send("prompt-ax:ok")
             case "ax-status":
                 // AXIsProcessTrusted() caches per-process, but the helper is
                 // spawned fresh whenever the main app restarts, so its value

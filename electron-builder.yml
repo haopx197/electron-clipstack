@@ -2,6 +2,12 @@ appId: com.clipstack.app
 productName: ClipStack
 directories:
     buildResources: build
+# Ad-hoc re-signs the fully assembled .app after electron-builder finishes.
+# Necessary because `extraFiles` adds files into Contents/Frameworks/ AFTER
+# Electron's stock ad-hoc signature was computed; without the re-sign macOS
+# rejects the bundle as damaged ("code has no resources but signature
+# indicates they must be present") and Finder shows the no-entry slash icon.
+afterPack: ./scripts/afterPack.js
 files:
     - "!**/.vscode/*"
     - "!src/*"
@@ -18,6 +24,8 @@ asarUnpack:
 extraFiles:
     - from: resources/ClipStackHelper.app
       to: Frameworks/ClipStackHelper.app
+    - from: resources/DisclaimSpawner
+      to: Frameworks/DisclaimSpawner
 win:
     executableName: clipstack
 nsis:

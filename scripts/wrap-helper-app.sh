@@ -39,7 +39,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>CFBundleIdentifier</key>
     <string>com.clipstack.helper</string>
     <key>CFBundleName</key>
-    <string>ClipStackHelper</string>
+    <string>ClipStack</string>
     <key>CFBundleDisplayName</key>
     <string>ClipStack</string>
     <key>CFBundleExecutable</key>
@@ -54,12 +54,17 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <string>1</string>
     <key>LSUIElement</key>
     <true/>
-    <key>LSBackgroundOnly</key>
-    <true/>
     <key>LSMinimumSystemVersion</key>
     <string>11.0</string>
 </dict>
 </plist>
 PLIST
+# NOTE: intentionally no LSBackgroundOnly. Both keys hide the helper from the
+# Dock, but LSBackgroundOnly signals "pure daemon, do not fully register",
+# which stops Launch Services from indexing the bundle — so mdls returns null
+# for CFBundleIdentifier, System Settings can't find the icon, and the entry
+# in Accessibility shows the generic executable placeholder instead of the
+# ClipStack icon. LSUIElement alone hides from the Dock while still allowing
+# full registration.
 
 echo "[wrap-helper] wrapped → $APP"

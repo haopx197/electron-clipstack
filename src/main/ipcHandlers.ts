@@ -14,7 +14,7 @@ import {
     setCaptureToClipboard
 } from "./store";
 import { markClipboardAsCurrent } from "./clipboardWatcher";
-import { simulatePasteViaHelper, queryHelperAxStatus } from "./helper";
+import { simulatePasteViaHelper, queryHelperAxStatus, promptAxViaHelper } from "./helper";
 import { changeHotkey } from "./hotkey";
 import { getMainWindow, hideWindow } from "./windowManager";
 import { applyCaptureToClipboard } from "./screencapture";
@@ -141,11 +141,12 @@ export function registerIpcHandlers(): void {
     // global mouse monitor — the Electron main process doesn't need AX at
     // all, so its trust state is meaningless for whether paste works.
     ipcMain.handle(IPC.SystemAccessibilityStatus, () => queryHelperAxStatus());
-    ipcMain.handle(IPC.SystemOpenAccessibilitySettings, () =>
-        shell.openExternal(
-            "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
-        )
-    );
+    // The banner's "Open Settings" button asks the helper to raise the
+    // native macOS AX-grant modal (via AXIsProcessTrustedWithOptions with
+    // prompt=true). That modal has its own "Open System Settings" button
+    // which jumps to the AX pane with the helper entry highlighted — a
+    // guided path better than dumping the user in an empty-looking pane.
+    ipcMain.handle(IPC.SystemOpenAccessibilitySettings, () => promptAxViaHelper());
     ipcMain.handle(IPC.SystemRelaunch, () => {
         // Dev mode: app.relaunch() bypasses vite dev server → blank renderer.
         // Skip auto-relaunch; restart manually in dev.

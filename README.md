@@ -54,9 +54,9 @@ Each release must ship four assets together:
 - `clipstack-arm64.dmg` — Apple Silicon build
 - `clipstack-x64.dmg` — Intel build
 - `install.sh` — first-time installer referenced by the README's `curl` one-liner
-- `latest.json` — `{ "sha": "<opaque build id>" }` consumed by the in-app updater
+- `latest.json` — `{ "timestamp": "1786935663981" }` consumed by the in-app updater
 
-The `sha` field is an opaque build identifier (currently a Unix-ms timestamp) — every `npm run build:mac` invocation gets a new one, whether or not source has changed. The DMG and `latest.json` produced in the same build are guaranteed to hold the same identifier. GitHub only serves `releases/latest/download/<name>` from the newest release, so every release must include all four assets.
+The `timestamp` is a Unix-ms string set from `Date.now()` at the start of each production build. Every `npm run build:mac` invocation gets a new one, whether or not source has changed. The DMG and `latest.json` produced in the same build are guaranteed to hold the same value. GitHub only serves `releases/latest/download/<name>` from the newest release, so every release must include all four assets.
 
 ### Publishing a new release (manual)
 

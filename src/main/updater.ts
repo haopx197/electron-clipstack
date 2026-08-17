@@ -7,17 +7,16 @@ import { IPC } from "../shared/ipc";
 import { getMainWindow } from "./windowManager";
 import type { UpdateInstallProgress, UpdateStatus } from "../shared/types";
 
-declare const __BUILD_SHA__: string;
+declare const __BUILD_TIMESTAMP__: string;
 
 const REPO_SLUG = "haopx197/electron-clipstack";
 const APP_NAME = "ClipStack";
 
 // latest.json is published as a release asset alongside the DMGs:
-//   { "sha": "<opaque build id>" }
-// The field name is `sha` for legacy reasons; the value is whatever
-// electron-vite baked into __BUILD_SHA__ (currently a Unix-ms timestamp).
+//   { "timestamp": "1786935663981" }
+// The value is a Unix-ms string set by electron-vite via __BUILD_TIMESTAMP__.
 // gen-latest-json.sh reads it back out of the compiled main bundle so both
-// artifacts are guaranteed to hold the same identifier.
+// artifacts always hold the same value.
 const LATEST_JSON_URL = `https://github.com/${REPO_SLUG}/releases/latest/download/latest.json`;
 
 function dmgUrl(): string {
@@ -25,7 +24,7 @@ function dmgUrl(): string {
     return `https://github.com/${REPO_SLUG}/releases/latest/download/${asset}`;
 }
 
-const CURRENT_SHA = typeof __BUILD_SHA__ === "string" ? __BUILD_SHA__ : "dev";
+const CURRENT_TIMESTAMP = typeof __BUILD_TIMESTAMP__ === "string" ? __BUILD_TIMESTAMP__ : "dev";
 
 let status: UpdateStatus = { hasUpdate: false };
 let installing = false;
@@ -35,15 +34,15 @@ export function getUpdateStatus(): UpdateStatus {
 }
 
 export async function checkForUpdate(): Promise<void> {
-    // Dev builds have no meaningful SHA to compare against.
-    if (CURRENT_SHA === "dev") return;
+    // Dev builds have no meaningful timestamp to compare against.
+    if (CURRENT_TIMESTAMP === "dev") return;
     try {
         const res = await net.fetch(`${LATEST_JSON_URL}?t=${Date.now()}`, { redirect: "follow" });
         if (!res.ok) return;
-        const body = (await res.json()) as { sha?: unknown };
-        const latestSha = typeof body.sha === "string" ? body.sha.trim() : "";
-        if (!latestSha) return;
-        status = { hasUpdate: latestSha !== CURRENT_SHA };
+        const body = (await res.json()) as { timestamp?: unknown };
+        const latestTimestamp = typeof body.timestamp === "string" ? body.timestamp.trim() : "";
+        if (!latestTimestamp) return;
+        status = { hasUpdate: latestTimestamp !== CURRENT_TIMESTAMP };
         // Push so the banner shows even if the renderer mounted before the fetch
         // completed (first-launch race on slow networks).
         const win = getMainWindow();

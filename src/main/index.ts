@@ -1,4 +1,4 @@
-import { app, protocol, net, session, shell, systemPreferences } from "electron";
+import { app, protocol, net, session, shell } from "electron";
 import { pathToFileURL } from "url";
 import { electronApp } from "@electron-toolkit/utils";
 import { IPC } from "../shared/ipc";
@@ -8,7 +8,12 @@ import { registerHotkey, unregisterAllHotkeys } from "./hotkey";
 import { applyCaptureToClipboard, restoreScreenshotTarget } from "./screencapture";
 import { registerIpcHandlers, broadcastItemsUpdated } from "./ipcHandlers";
 import { startClipboardWatcher, stopClipboardWatcher } from "./clipboardWatcher";
-import { startHelper, startMouseMonitor, stopMouseMonitor } from "./helper";
+import {
+    startHelper,
+    startMouseMonitor,
+    stopMouseMonitor,
+    setAccessibilityChangedListener
+} from "./helper";
 import { getCaptureToClipboard } from "./store";
 import { checkForUpdate } from "./updater";
 
@@ -101,10 +106,13 @@ app.whenReady().then(() => {
     // (`UpdatesStatusUpdated`) in case the window mounted before it finished.
     void checkForUpdate();
 
-    // Fires on NSDistributedNotificationCenter when any app's Accessibility
-    // trust flips (grant / revoke / add / remove from the pane). We just re-
-    // broadcast; renderer decides whether to relaunch.
-    systemPreferences.subscribeNotification("com.apple.accessibility.api", () => {
+    // The helper observes `com.apple.accessibility.api` on
+    // NSDistributedNotificationCenter and forwards each event as an
+    // `ax-changed` line. We rebroadcast to the renderer so it can trigger a
+    // relaunch. Subscription lives in the helper so nothing in the Electron
+    // main process touches AX-adjacent APIs — that keeps `com.clipstack.app`
+    // out of the System Settings Accessibility list.
+    setAccessibilityChangedListener(() => {
         const win = getMainWindow();
         if (win && !win.isDestroyed()) {
             win.webContents.send(IPC.SystemAccessibilityChanged);

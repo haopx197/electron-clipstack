@@ -270,6 +270,19 @@ func simulatePasteCmdV() {
 
 logErr("accessibility trusted: \(AXIsProcessTrusted())")
 
+// Observe TCC accessibility changes and forward to Electron over stdout. We
+// subscribe HERE (in the helper) rather than in the Electron main process so
+// nothing in `com.clipstack.app` touches AX at all — that keeps the .app
+// bundle from being registered as an AX-eligible client and appearing in
+// System Settings alongside the real helper entry.
+DistributedNotificationCenter.default().addObserver(
+    forName: NSNotification.Name("com.apple.accessibility.api"),
+    object: nil,
+    queue: OperationQueue.main
+) { _ in
+    send("ax-changed")
+}
+
 // Watch parent process — if the parent (Electron) dies for any reason
 // (including SIGKILL), the helper exits so we don't turn into a zombie orphan.
 let initialParentPid = getppid()

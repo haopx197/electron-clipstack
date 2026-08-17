@@ -12,6 +12,7 @@ let stdoutBuffer = "";
 
 let mouseClickListener: ((x: number, y: number) => void) | null = null;
 let clipboardChangedListener: (() => void) | null = null;
+let accessibilityChangedListener: (() => void) | null = null;
 // FIFO of pending `ax-status` request resolvers. Query is idempotent — each
 // query pushes a resolver, each response pops the front. Order is preserved
 // because helper handles the queue on its main dispatch queue serially.
@@ -23,10 +24,17 @@ let pasteboardFilePaths: string[] = [];
 let pasteboardImagePath: string | null = null;
 
 function resolveHelperPath(): string {
+    // The helper is packaged as `ClipStackHelper.app` in `Contents/Frameworks/`
+    // (via electron-builder `extraFiles`). Launch Services indexes standard
+    // helper locations like Frameworks/ but NOT nested Resources paths, so
+    // this placement is what lets macOS show the ClipStack icon in the
+    // Accessibility settings list (icon.icns is inside the helper bundle).
+    // `process.resourcesPath` in packaged app is `Contents/Resources`, so
+    // `..` = `Contents/`.
+    const exe = "ClipStackHelper.app/Contents/MacOS/ClipStackHelper";
     const candidates = [
-        join(process.resourcesPath, "app.asar.unpacked", "resources", "ClipStackHelper"),
-        join(process.resourcesPath, "resources", "ClipStackHelper"),
-        join(__dirname, "../../resources/ClipStackHelper")
+        join(process.resourcesPath, "..", "Frameworks", exe),
+        join(__dirname, "..", "..", "resources", exe)
     ];
     return candidates.find((p) => existsSync(p)) ?? candidates[candidates.length - 1];
 }
@@ -56,6 +64,9 @@ function handleLine(line: Line): void {
             return;
         case "clipboard-changed":
             clipboardChangedListener?.();
+            return;
+        case "ax-changed":
+            accessibilityChangedListener?.();
             return;
         case "click": {
             if (!mouseClickListener) return;
@@ -185,6 +196,15 @@ export function startClipboardWatch(cb: () => void): boolean {
 export function stopClipboardWatch(): void {
     clipboardChangedListener = null;
     write("pb-watch-stop");
+}
+
+// The helper subscribes to `com.apple.accessibility.api` on
+// NSDistributedNotificationCenter and emits `ax-changed` when it fires. Doing
+// the subscription in the helper (not in Electron main) is deliberate: it
+// means the .app bundle process makes zero AX-adjacent syscalls, so it never
+// gets registered as an AX-eligible client in the System Settings pane.
+export function setAccessibilityChangedListener(cb: () => void): void {
+    accessibilityChangedListener = cb;
 }
 
 // Query the helper's own `AXIsProcessTrusted()`. This is the value that

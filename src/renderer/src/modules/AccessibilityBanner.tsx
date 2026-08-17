@@ -10,22 +10,22 @@ export function AccessibilityBanner() {
 
     useEffect(() => {
         let cancelled = false;
-        let untrusted = false;
         void window.clipstack.getAccessibilityStatus().then((ok) => {
             if (cancelled) return;
-            untrusted = !ok;
             setTrusted(ok);
         });
 
-        // macOS caches `AXIsProcessTrustedWithOptions` per-process: after the
-        // user grants Accessibility, calling it again in the running process
-        // still returns `false`. Re-checking here is useless. When the
-        // `com.apple.accessibility.api` distributed notification fires and we
-        // were untrusted, just restart — the new process reads the fresh
-        // state. Guarded so grants to other apps don't cycle us while we're
-        // already trusted.
+        // macOS caches `AXIsProcessTrusted()` per-process — grant OR revoke
+        // is invisible until the process restarts. So on any AX notification
+        // we relaunch to force a fresh read; the new process either sees
+        // trusted (banner hides) or untrusted (banner shows). Cost: on the
+        // very first launch after install, the helper's AX prime adds it to
+        // TCC and triggers one spurious notification → one spurious relaunch.
+        // Subsequent launches don't re-add (already in TCC) so this happens
+        // exactly once per install. Accepted trade-off for zero latency on
+        // real user toggles.
         const offAX = window.clipstack.onAccessibilityChanged(() => {
-            if (untrusted) void window.clipstack.relaunch();
+            void window.clipstack.relaunch();
         });
         return () => {
             cancelled = true;

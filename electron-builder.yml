@@ -10,7 +10,14 @@ files:
     - "!{.env,.env.*,.npmrc,pnpm-lock.yaml}"
     - "!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}"
 asarUnpack:
-    - resources/**
+    # Tray icons live in Resources (unpacked from asar so they're accessible
+    # as regular files at runtime). Helper is NOT unpacked here — it's placed
+    # in Contents/Frameworks/ via `extraFiles` below so Launch Services
+    # indexes it as a proper .app bundle (custom icon + stable TCC identity).
+    - resources/trayIconTemplate*.png
+extraFiles:
+    - from: resources/ClipStackHelper.app
+      to: Frameworks/ClipStackHelper.app
 win:
     executableName: clipstack
 nsis:
@@ -33,10 +40,18 @@ mac:
               - arm64
               - x64
     entitlementsInherit: build/entitlements.mac.plist
+    # Do NOT add NSAccessibilityUsageDescription here. The .app bundle itself
+    # never requests AX — only the standalone ClipStackHelper binary does. If
+    # we advertise the AX usage description in the app's Info.plist, macOS
+    # pre-populates ClipStack.app into System Settings → Accessibility as a
+    # "prospective" entry that toggling has no effect on (it isn't the process
+    # doing the CGEvent post). Users see two entries ("App 1" with the correct
+    # icon and "App 2 / ClipStackHelper" with a Terminal icon) and get
+    # confused. Omitting the key means only the helper (which actually calls
+    # NSEvent.addGlobalMonitorForEvents) shows up in the pane.
     extendInfo:
         - LSUIElement: true
         - LSMinimumSystemVersion: "11.0"
-        - NSAccessibilityUsageDescription: ClipStack simulates ⌘V to paste your selected clipboard item into the active app.
     notarize: false
 dmg:
     # Stable filename (no version) → install.sh can hit the same URL across
